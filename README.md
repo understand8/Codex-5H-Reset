@@ -34,13 +34,14 @@ Codex CLI 拥有强大的工程辅助能力，但其额度遵循 **5 小时动�
 
 | 功能模块 | 特性说明 |
 | :--- | :--- |
+| 🪟 **Windows 11 Fluent 现代应用** | 全面升级 Win11 Fluent 2.0 设计语言。圆角卡片（Card UI）、胶囊式 Switch 动画开关、5H 与周额度双动态彩色进度条、沉浸式 DWM 窗口圆角与深浅色主题无缝切换。 |
 | ⏱️ **5小时周期全自动对齐** | 实时获取服务端 `windowDurationMins: 300` 窗口，在重置后 2 分钟全自动发送微型激活心跳，不浪费任何一个 5 小时周期。 |
 | 🪟 **单行极简胶囊悬浮窗 (HUD)** | 仅 `380x36` 的赛博风单行胶囊悬浮窗，精确显示 `5H: %` 与 `Week: %`。支持**图钉锁定防误触（锁定后不可移动、移开鼠标背景极淡防遮挡、Hover 时自动浮现图钉与关闭按钮）**，支持自由调节背景颜色、固定淡化深度与日常透明度，具备边缘磁吸与防出界保护。 |
+| 👥 **Auth Vault 凭据库 (会话 100% 共享)** | 创新凭据库热切换机制，多个 ChatGPT 账号切换时**只切换额度与身份，所有项目历史会话 (300+ sessions)、上下文记忆与自定义技能库 100% 完整保留共享**！ |
 | 🖥️ **无头后台守护进程 (Daemon)** | Core 调度引擎完全解耦，支持在纯 Linux 服务器、VPS、NAS、树莓派等无图形化环境下长期平稳守护运行（`python main.py daemon`）。 |
-| 👥 **多账号 Profile 隔离管理** | 支持配置与切换多个 Codex 账号目录（`~/.codex`、`~/.codex-work`），多账号开发者可在 CLI 或配置中秒级切换。 |
 | 🔔 **多渠道 Webhook 移动端推送** | 支持接入 **钉钉、飞书、企业微信、Telegram Bot、Server酱** 及通用 HTTP Webhook，额度重置与激活成功瞬时推送到手机。 |
 | 🔌 **开放式 Multi-CLI 扩展架构** | 采用抽象 Provider 模式，已深度适配 Codex CLI 原生 JSON-RPC 通信，预留 Claude Code、Copilot CLI 等额度扩展骨架。 |
-| 📦 **单文件免安装即开即用** | 提供开箱即用的 Windows `.exe` 单文件绿色版本，无需配置 Python 环境，双击即用。 |
+| 📦 **单文件免安装即开即用** | 提供开箱即用的 Windows `.exe` 单文件绿色版本，内置 Windows 11 Fluent 引擎，无需配置 Python 环境，双击即用。 |
 | 🛡️ **100% 零外网隐私遥测承诺** | 开源透明，无任何第三方数据采集或远程分析代码，所有 IPC 通信与额度探测完全限制于本地。 |
 
 ---
@@ -184,10 +185,11 @@ WantedBy=multi-user.target
 **Codex-5H-Reset** is a cross-platform sentinel designed for AI CLI heavy users. It automatically aligns with the server-side 5-hour rate limit reset cycle, triggers a minimalist heartbeat upon reset arrival, and provides an Xbox Game Bar-style single-line desktop HUD, headless VPS daemon, and multi-channel webhook dispatchers.
 
 ### Key Features
+- **Windows 11 Fluent Design**: Modern Win11 App styling featuring rounded Card UI, animated capsule Toggle Switch, dynamic color progress bars, native DWM rounded corners, and instant Light/Dark theme switching.
 - **Auto 5-Hour Cycle Alignment**: Listens to server-side `windowDurationMins: 300` reset timestamps and dispatches a lightweight wake-up message at `resetsAt + 2m`.
-- **Single-Line Cyber HUD Overlay**: Compact `380x36` pill widget with right-click menu, mouse-wheel transparency adjustment (0.40 ~ 1.00), drag pinning, and screen edge clamping.
+- **Single-Line Cyber HUD Overlay**: Compact `380x36` pill widget with right-click menu, mouse-wheel transparency adjustment (0.15 ~ 1.00), pin lock immobility, faint idle background, and screen edge clamping.
+- **Auth Vault Multi-Account Hot-Swapping**: Switch ChatGPT accounts on the fly with 100% preservation of all project sessions (300+ sessions), conversation history, and custom skills!
 - **Headless Daemon Engine**: Decoupled core engine running independently without Tkinter/DISPLAY on Linux servers, NAS, and VPS.
-- **Multi-Account Profile Switching**: Seamlessly manage and monitor distinct OpenAI / Codex configuration directories (`~/.codex`).
 - **Webhook Alerts**: Real-time push notifications to DingTalk, Feishu, WeCom, Telegram, ServerChan, and generic HTTP endpoints.
 - **Zero Telemetry Guarantee**: 100% auditable local execution with zero tracking and zero external telemetry.
 
@@ -214,9 +216,30 @@ python main.py profile --switch work
 ```mermaid
 flowchart TD
     subgraph UI ["User Interface Layer"]
-        A[Slate GUI Dashboard\n800x635 Fixed]
-        B[Single-Line HUD Overlay\n380x36 Alpha Pill]
-        C[System Tray Manager\nPystray + Desktop Toast]
+        A["Windows 11 Fluent App\n(CustomTkinter + DWM)"]
+        B["Single-Line HUD Overlay\n(380x36 Alpha Pill)"]
+        C["System Tray Manager\n(Pystray + Desktop Toast)"]
+    end
+
+    subgraph Auth ["Auth Vault Credential Layer"]
+        V["AuthVault Manager\n(~/.codex/auth_vault/)"]
+        H["Shared ~/.codex\n(sessions/ + sqlite/ + skills/)"]
+        V -. "1-Click Hot-Swap" .-> H
+    end
+
+    subgraph Core ["Core Sentinel Engine"]
+        D["SchedulerEngine\n(Tick 500ms + Polling 15m)"]
+        E["EventBus\n(Thread-Safe Queues)"]
+    end
+
+    subgraph Providers ["Provider Extensibility"]
+        F["Codex Provider\n(Stdio JSON-RPC)"]
+        G["Future Providers\n(Claude Code / Copilot)"]
+    end
+
+    UI --> Core
+    Core --> Auth
+    Core --> Providers
         D[Headless CLI Mode\nLinux / VPS / NAS]
     end
 

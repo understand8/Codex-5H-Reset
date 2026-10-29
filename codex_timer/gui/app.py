@@ -1,4 +1,4 @@
-"""Main GUI Window for Codex-5H-Reset (Modern Slate Theme & Fixed Dimensions)."""
+"""Main GUI Window for Codex-5H-Reset (Windows 11 Fluent Design with CustomTkinter)."""
 import ctypes
 import datetime as dt
 import os
@@ -7,8 +7,11 @@ import subprocess
 import sys
 import time
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 from typing import Optional, Dict, Any, Tuple
+
+import customtkinter as ctk
+from PIL import Image
 
 from ..config import ConfigManager, DEFAULT_PROMPT
 from ..core import SchedulerEngine, reset_target, five_hour
@@ -18,40 +21,25 @@ from .tray import TrayManager
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-def create_btn(parent, text, command, bg='#2563EB', fg='#FFFFFF', hover_bg='#1D4ED8',
-               font=('Microsoft YaHei UI', 9, 'bold'), padx=14, pady=6, border_color=None):
-    kw = {
-        'text': text,
-        'command': command,
-        'bg': bg,
-        'fg': fg,
-        'activebackground': hover_bg,
-        'activeforeground': fg,
-        'relief': 'flat',
-        'bd': 0,
-        'padx': padx,
-        'pady': pady,
-        'font': font,
-        'cursor': 'hand2'
-    }
-    if border_color:
-        kw['highlightthickness'] = 1
-        kw['highlightbackground'] = border_color
-        kw['highlightcolor'] = border_color
-    else:
-        kw['highlightthickness'] = 0
-    btn = tk.Button(parent, **kw)
-    btn.bind('<Enter>', lambda e: btn.configure(bg=hover_bg) if str(btn['state']) != 'disabled' else None)
-    btn.bind('<Leave>', lambda e: btn.configure(bg=bg) if str(btn['state']) != 'disabled' else None)
-    return btn
-
-
-def create_card(parent, padx=16, pady=12):
-    return tk.Frame(parent, bg='#FFFFFF', highlightthickness=1, highlightbackground='#E2E8F0', padx=padx, pady=pady)
+def enable_windows_fluent_dwm(hwnd: int) -> None:
+    """Enable Windows 11 rounded window corners and immersive styling via DWM API."""
+    if sys.platform != 'win32' or not hwnd:
+        return
+    try:
+        # DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+            ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)
+        )
+    except Exception:
+        pass
 
 
 class App:
-    def __init__(self, root: tk.Tk, config: Optional[ConfigManager] = None):
+    """Modern Windows 11 Fluent Application Window for Codex-5H-Reset."""
+
+    def __init__(self, root: ctk.CTk, config: Optional[ConfigManager] = None):
         self.root = root
         self.config = config or ConfigManager()
         self.engine = SchedulerEngine(config=self.config, log_callback=self._on_engine_log)
@@ -60,10 +48,11 @@ class App:
         self.when = tk.StringVar(value=(dt.datetime.now() + dt.timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'))
         self.quota = tk.StringVar(value='额度状态：尚未读取')
         self.status = tk.StringVar(value='自动刷新运行中')
-        self.show_overlay = tk.BooleanVar(value=self.config.get('show_overlay', False))
+        self.show_overlay = tk.BooleanVar(value=bool(self.config.get('show_overlay', False)))
         self.anim_dots = 0
+        self._last_banner_key = None
 
-        # Enable high-DPI scaling on Windows if available
+        # High-DPI scaling on Windows
         if sys.platform == 'win32':
             try:
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -73,159 +62,48 @@ class App:
                 except Exception:
                     pass
 
-        # Fixed, locked window dimensions
-        root.title('Codex 定时助手 v2.0')
-        root.geometry('800x635')
-        root.resizable(False, False)
-        root.configure(bg='#F8FAFC')
+        # Window Configuration
+        root.title('Codex 定时助手')
+        root.geometry('880x690')
+        root.minsize(860, 670)
+        root.resizable(True, True)
 
-        # Load and set taskbar and titlebar feather icon
-        icon_png = BASE_DIR / 'assets' / 'icon.png'
-        icon_ico = BASE_DIR / 'assets' / 'icon.ico'
-        if icon_png.exists():
+        # Apply Windows 11 DWM rounded corners
+        root.update_idletasks()
+        try:
+            hwnd = ctypes.windll.user32.GetParent(root.winfo_id()) or root.winfo_id()
+            enable_windows_fluent_dwm(hwnd)
+        except Exception:
+            pass
+
+        # Load feather quill icons
+        self.icon_png = BASE_DIR / 'assets' / 'icon.png'
+        self.icon_ico = BASE_DIR / 'assets' / 'icon.ico'
+        self.ctk_icon_img = None
+        if self.icon_png.exists():
             try:
-                self._app_icon_img = tk.PhotoImage(file=str(icon_png))
-                root.iconphoto(False, self._app_icon_img)
+                pil_img = Image.open(self.icon_png)
+                self.ctk_icon_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(34, 34))
+                self._app_icon_tk = tk.PhotoImage(file=str(self.icon_png))
+                root.iconphoto(False, self._app_icon_tk)
             except Exception:
                 pass
-        if sys.platform == 'win32' and icon_ico.exists():
+        if sys.platform == 'win32' and self.icon_ico.exists():
             try:
-                root.iconbitmap(str(icon_ico))
+                root.iconbitmap(str(self.icon_ico))
             except Exception:
                 pass
 
-        body = tk.Frame(root, bg='#F8FAFC', padx=22, pady=16)
-        body.pack(fill='both', expand=True)
+        # Main Scrollable / Padded Container
+        self.main_container = ctk.CTkFrame(root, corner_radius=0, fg_color="transparent")
+        self.main_container.pack(fill='both', expand=True, padx=22, pady=(16, 18))
 
-        # 1. Header Frame
-        header = tk.Frame(body, bg='#F8FAFC')
-        header.pack(fill='x', pady=(0, 10))
-
-        title_box = tk.Frame(header, bg='#F8FAFC')
-        title_box.pack(side='left')
-
-        title_row = tk.Frame(title_box, bg='#F8FAFC')
-        title_row.pack(anchor='w')
-        tk.Label(title_row, text='Codex 定时助手', font=('Microsoft YaHei UI', 16, 'bold'), bg='#F8FAFC', fg='#0F172A').pack(side='left')
-        tk.Label(title_row, text=' 开源守护版', font=('Microsoft YaHei UI', 8, 'bold'), bg='#EFF6FF', fg='#2563EB', padx=6, pady=1).pack(side='left', padx=(8, 0))
-
-        tk.Label(title_box, text='开机即用 · 额度刷新自动对齐 · 多账号守护 · 零复杂配置', font=('Microsoft YaHei UI', 9), bg='#F8FAFC', fg='#64748B').pack(anchor='w', pady=(3, 0))
-
-        header_right = tk.Frame(header, bg='#F8FAFC')
-        header_right.pack(side='right')
-
-        # 桌面单行悬浮条开关
-        cb_overlay = tk.Checkbutton(header_right, text='🖥 桌面悬浮条', variable=self.show_overlay,
-                                    command=self.toggle_overlay, bg='#F8FAFC', activebackground='#F8FAFC',
-                                    fg='#1E293B', font=('Microsoft YaHei UI', 8, 'bold'), selectcolor='#FFFFFF', relief='flat', bd=0)
-        cb_overlay.pack(side='left', padx=(0, 4))
-
-        btn_overlay_style = create_btn(header_right, text='🎨 外观', command=self.open_overlay_settings,
-                                       bg='#F1F5F9', fg='#334155', hover_bg='#E2E8F0', border_color='#CBD5E1',
-                                       padx=8, pady=3, font=('Microsoft YaHei UI', 8))
-        btn_overlay_style.pack(side='left', padx=(0, 8))
-
-        conn_box = tk.Frame(header_right, bg='#F0FDF4', highlightthickness=1, highlightbackground='#BBF7D0', padx=8, pady=4, cursor='hand2')
-        conn_box.pack(side='left', padx=(0, 8))
-        self.lbl_profile = tk.Label(conn_box, text=f"● 账号: {self.config.get_active_profile_name()}", font=('Microsoft YaHei UI', 8, 'bold'), bg='#F0FDF4', fg='#15803D', cursor='hand2')
-        self.lbl_profile.pack()
-        conn_box.bind('<Button-1>', lambda e: self.open_account_manager())
-        self.lbl_profile.bind('<Button-1>', lambda e: self.open_account_manager())
-
-        btn_login = create_btn(header_right, text='👥 多账号管理', command=self.open_account_manager, bg='#FFFFFF', fg='#475569', hover_bg='#F1F5F9', border_color='#CBD5E1', padx=10, pady=4, font=('Microsoft YaHei UI', 8, 'bold'))
-        btn_login.pack(side='left')
-
-        # 2. Quota Card
-        card_quota = create_card(body, padx=16, pady=10)
-        card_quota.pack(fill='x', pady=(0, 10))
-
-        q_top = tk.Frame(card_quota, bg='#FFFFFF')
-        q_top.pack(fill='x')
-        tk.Label(q_top, text='📊 额度与账号状态', font=('Microsoft YaHei UI', 10, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(side='left')
-
-        q_top_right = tk.Frame(q_top, bg='#FFFFFF')
-        q_top_right.pack(side='right')
-        tk.Label(q_top_right, text='自动检测：每 15 分钟', font=('Microsoft YaHei UI', 8), bg='#F1F5F9', fg='#475569', padx=6, pady=2).pack(side='left', padx=(0, 8))
-        btn_refresh_q = create_btn(q_top_right, text='立即刷新额度', command=self.check, bg='#FFFFFF', fg='#2563EB', hover_bg='#EFF6FF', border_color='#BFDBFE', padx=9, pady=2, font=('Microsoft YaHei UI', 8, 'bold'))
-        btn_refresh_q.pack(side='left')
-
-        self.quota_pills_frame = tk.Frame(card_quota, bg='#FFFFFF')
-        self.quota_pills_frame.pack(fill='x', pady=(8, 4))
-
-        self.pill_pct = tk.Label(self.quota_pills_frame, text='🔋 5H额度: 尚未读取', font=('Microsoft YaHei UI', 9, 'bold'), bg='#F1F5F9', fg='#475569', padx=10, pady=4)
-        self.pill_pct.pack(side='left', padx=(0, 8))
-
-        self.pill_reset = tk.Label(self.quota_pills_frame, text='⏰ 5H刷新: 尚未读取', font=('Microsoft YaHei UI', 9), bg='#F1F5F9', fg='#475569', padx=10, pady=4)
-        self.pill_reset.pack(side='left', padx=(0, 8))
-
-        self.pill_week = tk.Label(self.quota_pills_frame, text='📅 周额度: 尚未读取', font=('Microsoft YaHei UI', 9), bg='#F1F5F9', fg='#475569', padx=10, pady=4)
-        self.pill_week.pack(side='left', padx=(0, 8))
-
-        self.pill_avail = tk.Label(self.quota_pills_frame, text='🔒 普通额度: 尚未读取', font=('Microsoft YaHei UI', 9), bg='#F1F5F9', fg='#475569', padx=10, pady=4)
-        self.pill_avail.pack(side='left')
-
-        self.quota_label = tk.Label(card_quota, textvariable=self.quota, font=('Microsoft YaHei UI', 9), bg='#FFFFFF', fg='#64748B', wraplength=740, justify='left')
-        self.quota_label.pack(anchor='w', pady=(4, 2))
-
-        # 3. Core Schedule & Control Card
-        card_control = create_card(body, padx=16, pady=12)
-        card_control.pack(fill='x', pady=(0, 10))
-
-        # Live Execution & Countdown Banner
-        self.banner_frame = tk.Frame(card_control, bg='#ECFDF5', highlightthickness=1, highlightbackground='#10B981', padx=14, pady=10)
-        self.banner_frame.pack(fill='x', pady=(0, 10))
-
-        self.banner_inner = tk.Frame(self.banner_frame, bg='#ECFDF5')
-        self.banner_inner.pack(fill='x')
-
-        self.banner_title = tk.Label(self.banner_inner, text='🟢 自动刷新运行中 · 待命中', font=('Microsoft YaHei UI', 12, 'bold'), bg='#ECFDF5', fg='#047857')
-        self.banner_title.pack(anchor='w')
-
-        self.banner_desc = tk.Label(self.banner_inner, text='只要软件开着就一直会自动跟随额度刷新（每 15 分钟自动检测一次）', font=('Microsoft YaHei UI', 9), bg='#ECFDF5', fg='#065F46')
-        self.banner_desc.pack(anchor='w', pady=(2, 0))
-
-        # Timing Row
-        row_timing = tk.Frame(card_control, bg='#FFFFFF')
-        row_timing.pack(fill='x', pady=(0, 12))
-
-        tk.Label(row_timing, text='定时发送时间', font=('Microsoft YaHei UI', 9, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(side='left', padx=(0, 8))
-        self.entry_when = tk.Entry(row_timing, textvariable=self.when, width=22, font=('Consolas', 10), bg='#F8FAFC', relief='flat', highlightthickness=1, highlightbackground='#CBD5E1', highlightcolor='#2563EB')
-        self.entry_when.pack(side='left', padx=(0, 8), ipady=3)
-
-        btn_use_reset = create_btn(row_timing, text='重设为刷新时间 + 2 分钟', command=self.use_reset, bg='#F1F5F9', fg='#1E293B', hover_bg='#E2E8F0', border_color='#CBD5E1', padx=10, pady=3, font=('Microsoft YaHei UI', 8))
-        btn_use_reset.pack(side='left', padx=(0, 6))
-
-        btn_apply_time = create_btn(row_timing, text='应用自定义时间', command=self.apply_custom_time, bg='#F1F5F9', fg='#2563EB', hover_bg='#EFF6FF', border_color='#BFDBFE', padx=10, pady=3, font=('Microsoft YaHei UI', 8, 'bold'))
-        btn_apply_time.pack(side='left', padx=(0, 8))
-
-        tk.Label(row_timing, text='（默认全自动对齐，无需手动修改）', font=('Microsoft YaHei UI', 8), bg='#FFFFFF', fg='#94A3B8').pack(side='left')
-
-        # Action Buttons
-        row_actions = tk.Frame(card_control, bg='#FFFFFF')
-        row_actions.pack(fill='x')
-
-        self.btn_pause = create_btn(row_actions, text='⏸  暂停自动刷新', command=self.toggle_pause, bg='#D97706', fg='#FFFFFF', hover_bg='#B45309', font=('Microsoft YaHei UI', 10, 'bold'), padx=18, pady=8)
-        self.btn_pause.pack(side='left', padx=(0, 10))
-
-        self.btn_send_now = create_btn(row_actions, text='⚡  立即发送一次', command=self.send_now, bg='#FFFFFF', fg='#1E293B', hover_bg='#F1F5F9', border_color='#CBD5E1', font=('Microsoft YaHei UI', 9, 'bold'), padx=14, pady=8)
-        self.btn_send_now.pack(side='left')
-
-        # 4. Logs Card
-        card_logs = create_card(body, padx=14, pady=8)
-        card_logs.pack(fill='both', expand=True, pady=(0, 6))
-
-        logs_header = tk.Frame(card_logs, bg='#FFFFFF')
-        logs_header.pack(fill='x', pady=(0, 6))
-
-        tk.Label(logs_header, text='📋 运行日志', font=('Microsoft YaHei UI', 9, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(side='left')
-
-        btn_clear = create_btn(logs_header, text='清空日志显示', command=self.clear_logs, bg='#FFFFFF', fg='#64748B', hover_bg='#F1F5F9', font=('Microsoft YaHei UI', 8), padx=6, pady=1)
-        btn_clear.pack(side='right')
-
-        self.logs = tk.Text(card_logs, height=6, font=('Consolas', 9), bg='#0F172A', fg='#E2E8F0', insertbackground='#38BDF8', relief='flat', padx=10, pady=8, state='disabled')
-        self.logs.pack(fill='both', expand=True)
-
-        tk.Label(body, text='💡 软件开着就会持续自动刷新。开启右上角“桌面悬浮条”可实时浮在桌面上查看。', font=('Microsoft YaHei UI', 8), bg='#F8FAFC', fg='#64748B').pack(anchor='w')
+        # Build Fluent UI Sections
+        self._build_header()
+        self._build_quota_dashboard()
+        self._build_execution_card()
+        self._build_logs_card()
+        self._build_footer()
 
         # Managers
         self.overlay_mgr = SingleLineOverlay(root=self.root, app_ref=self)
@@ -243,7 +121,458 @@ class App:
         if self.show_overlay.get():
             root.after(400, self.overlay_mgr.show)
 
-    # --- Properties mapped to Engine for backwards compatibility ---
+    # =========================================================================
+    # Fluent UI Construction
+    # =========================================================================
+
+    def _build_header(self) -> None:
+        """Windows 11 Header bar with logo, title, account pill, and quick switches."""
+        header = ctk.CTkFrame(self.main_container, corner_radius=12,
+                              fg_color=("#FFFFFF", "#2B2B2B"),
+                              border_width=1, border_color=("#E5E7EB", "#383838"))
+        header.pack(fill='x', pady=(0, 12), ipady=4)
+
+        h_inner = ctk.CTkFrame(header, fg_color="transparent")
+        h_inner.pack(fill='x', padx=16, pady=10)
+
+        # Left: App Icon & Title Stack
+        left_box = ctk.CTkFrame(h_inner, fg_color="transparent")
+        left_box.pack(side='left', fill='y')
+
+        if self.ctk_icon_img:
+            lbl_icon = ctk.CTkLabel(left_box, image=self.ctk_icon_img, text="")
+            lbl_icon.pack(side='left', padx=(0, 12))
+
+        title_stack = ctk.CTkFrame(left_box, fg_color="transparent")
+        title_stack.pack(side='left')
+
+        row_title = ctk.CTkFrame(title_stack, fg_color="transparent")
+        row_title.pack(anchor='w')
+
+        lbl_app = ctk.CTkLabel(row_title, text="Codex 定时助手",
+                               font=ctk.CTkFont(family="Microsoft YaHei UI", size=18, weight="bold"),
+                               text_color=("#0F172A", "#F8FAFC"))
+        lbl_app.pack(side='left', padx=(0, 8))
+
+        # Pro / Open Source Badge
+        lbl_badge = ctk.CTkLabel(row_title, text="PRO 守护版",
+                                 font=ctk.CTkFont(family="Microsoft YaHei UI", size=9, weight="bold"),
+                                 fg_color=("#EFF6FF", "#1E293B"),
+                                 text_color=("#2563EB", "#38BDF8"),
+                                 corner_radius=6, padx=7, pady=2)
+        lbl_badge.pack(side='left', padx=(0, 8))
+
+        # Clickable Account Pill
+        self.btn_account_pill = ctk.CTkButton(
+            row_title,
+            text=f"🟢 {self.config.get_active_profile_name()}",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+            fg_color=("#F0FDF4", "#064E3B"),
+            hover_color=("#DCFCE7", "#065F46"),
+            text_color=("#15803D", "#34D399"),
+            corner_radius=12,
+            height=24,
+            command=self.open_account_manager,
+            cursor="hand2"
+        )
+        self.btn_account_pill.pack(side='left')
+
+        lbl_subtitle = ctk.CTkLabel(title_stack,
+                                    text="开机即用 · 额度自动对齐刷新 · 多账号会话无损切换 · 零复杂配置",
+                                    font=ctk.CTkFont(family="Microsoft YaHei UI", size=10),
+                                    text_color=("#64748B", "#94A3B8"))
+        lbl_subtitle.pack(anchor='w', pady=(2, 0))
+
+        # Right: Modern Fluent Controls
+        right_box = ctk.CTkFrame(h_inner, fg_color="transparent")
+        right_box.pack(side='right', fill='y')
+
+        # Windows 11 style animated pill switch for desktop overlay
+        self.sw_overlay = ctk.CTkSwitch(
+            right_box,
+            text="桌面悬浮条",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=11, weight="bold"),
+            variable=self.show_overlay,
+            command=self.toggle_overlay,
+            switch_width=44,
+            switch_height=22,
+            progress_color="#2563EB",
+            cursor="hand2"
+        )
+        self.sw_overlay.pack(side='left', padx=(0, 10))
+
+        # Overlay Appearance Button
+        btn_style = ctk.CTkButton(
+            right_box,
+            text="🎨 外观",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10),
+            width=64,
+            height=30,
+            corner_radius=8,
+            fg_color="transparent",
+            hover_color=("#F1F5F9", "#334155"),
+            text_color=("#334155", "#E2E8F0"),
+            border_width=1,
+            border_color=("#CBD5E1", "#475569"),
+            command=self.open_overlay_settings,
+            cursor="hand2"
+        )
+        btn_style.pack(side='left', padx=(0, 6))
+
+        # Account Vault Manager Button
+        btn_vault = ctk.CTkButton(
+            right_box,
+            text="👥 凭据库",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+            width=76,
+            height=30,
+            corner_radius=8,
+            fg_color=("#2563EB", "#1D4ED8"),
+            hover_color=("#1D4ED8", "#1E40AF"),
+            text_color="#FFFFFF",
+            command=self.open_account_manager,
+            cursor="hand2"
+        )
+        btn_vault.pack(side='left', padx=(0, 6))
+
+        # Dark / Light Theme Toggle Button
+        self.btn_theme = ctk.CTkButton(
+            right_box,
+            text="🌓",
+            font=ctk.CTkFont(size=13),
+            width=36,
+            height=30,
+            corner_radius=8,
+            fg_color="transparent",
+            hover_color=("#F1F5F9", "#334155"),
+            text_color=("#334155", "#E2E8F0"),
+            border_width=1,
+            border_color=("#CBD5E1", "#475569"),
+            command=self.toggle_theme,
+            cursor="hand2"
+        )
+        self.btn_theme.pack(side='left')
+
+    def _build_quota_dashboard(self) -> None:
+        """Fluent 2.0 Quota Dashboard with dynamic progress bars and KPI stats."""
+        dash_frame = ctk.CTkFrame(self.main_container, corner_radius=12,
+                                  fg_color=("#FFFFFF", "#2B2B2B"),
+                                  border_width=1, border_color=("#E5E7EB", "#383838"))
+        dash_frame.pack(fill='x', pady=(0, 12), ipady=4)
+
+        d_inner = ctk.CTkFrame(dash_frame, fg_color="transparent")
+        d_inner.pack(fill='x', padx=16, pady=12)
+
+        # Header of Dashboard
+        d_top = ctk.CTkFrame(d_inner, fg_color="transparent")
+        d_top.pack(fill='x', pady=(0, 10))
+
+        lbl_dash_title = ctk.CTkLabel(d_top, text="📊 额度与实时看板",
+                                      font=ctk.CTkFont(family="Microsoft YaHei UI", size=12, weight="bold"),
+                                      text_color=("#1E293B", "#F1F5F9"))
+        lbl_dash_title.pack(side='left')
+
+        d_top_right = ctk.CTkFrame(d_top, fg_color="transparent")
+        d_top_right.pack(side='right')
+
+        lbl_poll = ctk.CTkLabel(d_top_right, text="静默轮询: 每 15 分钟",
+                                font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+                                fg_color=("#F1F5F9", "#1E293B"),
+                                text_color=("#64748B", "#94A3B8"),
+                                corner_radius=6, padx=8, pady=3)
+        lbl_poll.pack(side='left', padx=(0, 8))
+
+        btn_refresh = ctk.CTkButton(
+            d_top_right,
+            text="🔄 立即刷新",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+            width=84,
+            height=26,
+            corner_radius=6,
+            fg_color=("#F1F5F9", "#334155"),
+            hover_color=("#E2E8F0", "#475569"),
+            text_color=("#2563EB", "#38BDF8"),
+            command=self.check,
+            cursor="hand2"
+        )
+        btn_refresh.pack(side='left')
+
+        # Two Main Metric Cards (5H and Weekly) Side-by-Side
+        grid_frame = ctk.CTkFrame(d_inner, fg_color="transparent")
+        grid_frame.pack(fill='x')
+        grid_frame.columnconfigure(0, weight=1)
+        grid_frame.columnconfigure(1, weight=1)
+
+        # Card 1: 5-Hour Limit Card
+        card_5h = ctk.CTkFrame(grid_frame, corner_radius=10,
+                               fg_color=("#F8FAFC", "#1E1E1E"),
+                               border_width=1, border_color=("#E2E8F0", "#333333"))
+        card_5h.grid(row=0, column=0, sticky='nsew', padx=(0, 6), pady=2, ipady=4)
+
+        card_5h_in = ctk.CTkFrame(card_5h, fg_color="transparent")
+        card_5h_in.pack(fill='both', padx=12, pady=10)
+
+        # 5H Card Header
+        h_5h = ctk.CTkFrame(card_5h_in, fg_color="transparent")
+        h_5h.pack(fill='x')
+        ctk.CTkLabel(h_5h, text="⏳ 5小时重置周期",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                     text_color=("#475569", "#94A3B8")).pack(side='left')
+        self.badge_5h_status = ctk.CTkLabel(h_5h, text="读取中",
+                                            font=ctk.CTkFont(family="Microsoft YaHei UI", size=8, weight="bold"),
+                                            fg_color=("#F1F5F9", "#27272A"),
+                                            text_color=("#64748B", "#A1A1AA"),
+                                            corner_radius=6, padx=6, pady=1)
+        self.badge_5h_status.pack(side='right')
+
+        # 5H Big Value & Progress Bar
+        self.lbl_5h_pct = ctk.CTkLabel(card_5h_in, text="--%",
+                                      font=ctk.CTkFont(family="Segoe UI Variable Display", size=24, weight="bold"),
+                                      text_color=("#2563EB", "#38BDF8"))
+        self.lbl_5h_pct.pack(anchor='w', pady=(2, 2))
+
+        self.prog_5h = ctk.CTkProgressBar(card_5h_in, height=8, corner_radius=4,
+                                          fg_color=("#E2E8F0", "#3F3F46"),
+                                          progress_color="#2563EB")
+        self.prog_5h.set(0.0)
+        self.prog_5h.pack(fill='x', pady=(2, 6))
+
+        self.lbl_5h_meta = ctk.CTkLabel(card_5h_in, text="⏰ 刷新时间: 正在检测...",
+                                       font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+                                       text_color=("#64748B", "#94A3B8"))
+        self.lbl_5h_meta.pack(anchor='w')
+
+        # Card 2: Weekly Limit Card
+        card_wk = ctk.CTkFrame(grid_frame, corner_radius=10,
+                               fg_color=("#F8FAFC", "#1E1E1E"),
+                               border_width=1, border_color=("#E2E8F0", "#333333"))
+        card_wk.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=2, ipady=4)
+
+        card_wk_in = ctk.CTkFrame(card_wk, fg_color="transparent")
+        card_wk_in.pack(fill='both', padx=12, pady=10)
+
+        # Weekly Card Header
+        h_wk = ctk.CTkFrame(card_wk_in, fg_color="transparent")
+        h_wk.pack(fill='x')
+        ctk.CTkLabel(h_wk, text="📅 每周额度总览",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                     text_color=("#475569", "#94A3B8")).pack(side='left')
+        self.badge_wk_status = ctk.CTkLabel(h_wk, text="读取中",
+                                            font=ctk.CTkFont(family="Microsoft YaHei UI", size=8, weight="bold"),
+                                            fg_color=("#F1F5F9", "#27272A"),
+                                            text_color=("#64748B", "#A1A1AA"),
+                                            corner_radius=6, padx=6, pady=1)
+        self.badge_wk_status.pack(side='right')
+
+        # Weekly Big Value & Progress Bar
+        self.lbl_wk_pct = ctk.CTkLabel(card_wk_in, text="--%",
+                                      font=ctk.CTkFont(family="Segoe UI Variable Display", size=24, weight="bold"),
+                                      text_color=("#10B981", "#34D399"))
+        self.lbl_wk_pct.pack(anchor='w', pady=(2, 2))
+
+        self.prog_wk = ctk.CTkProgressBar(card_wk_in, height=8, corner_radius=4,
+                                          fg_color=("#E2E8F0", "#3F3F46"),
+                                          progress_color="#10B981")
+        self.prog_wk.set(0.0)
+        self.prog_wk.pack(fill='x', pady=(2, 6))
+
+        self.lbl_wk_meta = ctk.CTkLabel(card_wk_in, text="📅 周刷新: 正在检测...",
+                                       font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+                                       text_color=("#64748B", "#94A3B8"))
+        self.lbl_wk_meta.pack(anchor='w')
+
+    def _build_execution_card(self) -> None:
+        """Fluent Hero Card displaying real-time execution status, countdown, and primary action controls."""
+        self.card_hero = ctk.CTkFrame(self.main_container, corner_radius=12,
+                                     fg_color=("#ECFDF5", "#064E3B"),
+                                     border_width=1, border_color=("#A7F3D0", "#047857"))
+        self.card_hero.pack(fill='x', pady=(0, 12), ipady=6)
+
+        c_inner = ctk.CTkFrame(self.card_hero, fg_color="transparent")
+        c_inner.pack(fill='x', padx=16, pady=12)
+
+        # Top Status Headline & Sub-caption
+        self.lbl_hero_title = ctk.CTkLabel(
+            c_inner,
+            text="🟢 自动刷新运行中 · 待命中",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=13, weight="bold"),
+            text_color=("#065F46", "#A7F3D0")
+        )
+        self.lbl_hero_title.pack(anchor='w')
+
+        self.lbl_hero_desc = ctk.CTkLabel(
+            c_inner,
+            text="已连接后台守护引擎，只要软件开着就会持续自动跟随刷新额度",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+            text_color=("#047857", "#6EE7B7")
+        )
+        self.lbl_hero_desc.pack(anchor='w', pady=(2, 10))
+
+        # Timing Row
+        row_timing = ctk.CTkFrame(c_inner, fg_color="transparent")
+        row_timing.pack(fill='x', pady=(0, 12))
+
+        ctk.CTkLabel(row_timing, text="定时发送时间",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                     text_color=("#0F172A", "#F1F5F9")).pack(side='left', padx=(0, 8))
+
+        self.entry_when = ctk.CTkEntry(
+            row_timing,
+            textvariable=self.when,
+            width=210,
+            height=30,
+            corner_radius=8,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            fg_color=("#FFFFFF", "#1E1E1E"),
+            border_color=("#CBD5E1", "#475569")
+        )
+        self.entry_when.pack(side='left', padx=(0, 8))
+
+        btn_use_reset = ctk.CTkButton(
+            row_timing,
+            text="对齐刷新时间 + 2分钟",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+            height=30,
+            corner_radius=8,
+            fg_color=("#FFFFFF", "#1E1E1E"),
+            hover_color=("#F1F5F9", "#333333"),
+            text_color=("#0F172A", "#F1F5F9"),
+            border_width=1,
+            border_color=("#CBD5E1", "#475569"),
+            command=self.use_reset,
+            cursor="hand2"
+        )
+        btn_use_reset.pack(side='left', padx=(0, 6))
+
+        btn_apply_time = ctk.CTkButton(
+            row_timing,
+            text="应用自定义时间",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=9, weight="bold"),
+            height=30,
+            corner_radius=8,
+            fg_color=("#2563EB", "#1D4ED8"),
+            hover_color=("#1D4ED8", "#1E40AF"),
+            text_color="#FFFFFF",
+            command=self.apply_custom_time,
+            cursor="hand2"
+        )
+        btn_apply_time.pack(side='left', padx=(0, 8))
+
+        ctk.CTkLabel(row_timing, text="(全自动对齐，无需手动干预)",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=8),
+                     text_color=("#64748B", "#94A3B8")).pack(side='left')
+
+        # Action Buttons Row
+        row_actions = ctk.CTkFrame(c_inner, fg_color="transparent")
+        row_actions.pack(fill='x')
+
+        self.btn_pause = ctk.CTkButton(
+            row_actions,
+            text="⏸  暂停自动刷新",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+            height=36,
+            corner_radius=8,
+            fg_color="#D97706",
+            hover_color="#B45309",
+            text_color="#FFFFFF",
+            command=self.toggle_pause,
+            cursor="hand2"
+        )
+        self.btn_pause.pack(side='left', padx=(0, 10))
+
+        self.btn_send_now = ctk.CTkButton(
+            row_actions,
+            text="⚡  立即发送一次",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+            height=36,
+            corner_radius=8,
+            fg_color=("#2563EB", "#1D4ED8"),
+            hover_color=("#1D4ED8", "#1E40AF"),
+            text_color="#FFFFFF",
+            command=self.send_now,
+            cursor="hand2"
+        )
+        self.btn_send_now.pack(side='left')
+
+    def _build_logs_card(self) -> None:
+        """Modern Terminal / Logs card with copy and clear actions."""
+        card_logs = ctk.CTkFrame(self.main_container, corner_radius=12,
+                                 fg_color=("#FFFFFF", "#2B2B2B"),
+                                 border_width=1, border_color=("#E5E7EB", "#383838"))
+        card_logs.pack(fill='both', expand=True, pady=(0, 8), ipady=2)
+
+        l_inner = ctk.CTkFrame(card_logs, fg_color="transparent")
+        l_inner.pack(fill='both', expand=True, padx=14, pady=10)
+
+        # Logs Header
+        l_top = ctk.CTkFrame(l_inner, fg_color="transparent")
+        l_top.pack(fill='x', pady=(0, 6))
+
+        ctk.CTkLabel(l_top, text="📋 调度与运行日志",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                     text_color=("#1E293B", "#F1F5F9")).pack(side='left')
+
+        l_top_right = ctk.CTkFrame(l_top, fg_color="transparent")
+        l_top_right.pack(side='right')
+
+        btn_copy = ctk.CTkButton(
+            l_top_right,
+            text="📋 复制全部",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=8),
+            width=68,
+            height=22,
+            corner_radius=6,
+            fg_color="transparent",
+            hover_color=("#F1F5F9", "#334155"),
+            text_color=("#64748B", "#94A3B8"),
+            command=self.copy_logs,
+            cursor="hand2"
+        )
+        btn_copy.pack(side='left', padx=(0, 4))
+
+        btn_clear = ctk.CTkButton(
+            l_top_right,
+            text="🗑️ 清空显示",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=8),
+            width=68,
+            height=22,
+            corner_radius=6,
+            fg_color="transparent",
+            hover_color=("#F1F5F9", "#334155"),
+            text_color=("#64748B", "#94A3B8"),
+            command=self.clear_logs,
+            cursor="hand2"
+        )
+        btn_clear.pack(side='left')
+
+        # Fluent Dark / Slate Monospace Text Area
+        self.logs = ctk.CTkTextbox(
+            l_inner,
+            height=120,
+            corner_radius=8,
+            font=ctk.CTkFont(family="Consolas", size=10),
+            fg_color=("#0F172A", "#141824"),
+            text_color="#E2E8F0",
+            wrap="char"
+        )
+        self.logs.pack(fill='both', expand=True)
+
+    def _build_footer(self) -> None:
+        """Bottom note and status indicator."""
+        foot_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        foot_frame.pack(fill='x', pady=(2, 0))
+
+        lbl_foot = ctk.CTkLabel(
+            foot_frame,
+            text="💡 软件开着就会持续自动刷新额度窗口。开启右上角“桌面悬浮条”可实时将极简条钉在桌面上。",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=8),
+            text_color=("#64748B", "#94A3B8")
+        )
+        lbl_foot.pack(anchor='w')
+
+    # =========================================================================
+    # Properties mapped to SchedulerEngine
+    # =========================================================================
     @property
     def busy(self): return self.engine.busy
     @property
@@ -269,6 +598,17 @@ class App:
     @latest.setter
     def latest(self, val): self.engine.latest = val
 
+    # =========================================================================
+    # Theme & Dialog Actions
+    # =========================================================================
+
+    def toggle_theme(self) -> None:
+        """Toggle between Dark and Light mode dynamically."""
+        cur = ctk.get_appearance_mode()
+        new_mode = "Light" if cur.lower() == "dark" else "Dark"
+        ctk.set_appearance_mode(new_mode)
+        self.log(f"已切换界面主题至：{new_mode} 模式")
+
     def _on_engine_log(self, text: str) -> None:
         self.log(text)
 
@@ -287,6 +627,15 @@ class App:
         self.logs.configure(state='disabled')
         with (BASE_DIR / 'activity.log').open('a', encoding='utf-8') as f:
             f.write(line)
+
+    def copy_logs(self) -> None:
+        try:
+            content = self.logs.get("1.0", "end").strip()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            self.log("运行日志已全部复制到剪贴板。")
+        except Exception:
+            pass
 
     def clear_logs(self) -> None:
         self.logs.configure(state='normal')
@@ -310,6 +659,170 @@ class App:
             self.show_overlay.set(True)
             self.toggle_overlay()
         self.overlay_mgr.open_settings_dialog()
+
+    def open_account_manager(self) -> None:
+        """Modern Fluent Dialog for multi-account Auth Vault management with 100% session preservation."""
+        from ..auth_vault import AuthVault
+
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title("👥 多账号凭据库（会话数据 100% 共享）")
+        dlg.geometry("560x540")
+        dlg.resizable(False, False)
+        dlg.attributes('-topmost', True)
+
+        try:
+            hwnd = ctypes.windll.user32.GetParent(dlg.winfo_id()) or dlg.winfo_id()
+            enable_windows_fluent_dwm(hwnd)
+        except Exception:
+            pass
+
+        d_body = ctk.CTkFrame(dlg, corner_radius=0, fg_color="transparent")
+        d_body.pack(fill='both', expand=True, padx=20, pady=16)
+
+        # Header Title Stack
+        h_box = ctk.CTkFrame(d_body, fg_color="transparent")
+        h_box.pack(fill='x', pady=(0, 10))
+
+        ctk.CTkLabel(h_box, text="👥 多账号凭据库 (Auth Vault)",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=15, weight="bold"),
+                     text_color=("#0F172A", "#F8FAFC")).pack(anchor='w')
+        ctk.CTkLabel(h_box, text="💡 换号只切换扣费额度，所有项目会话、历史聊天与技能库 100% 完整保留！",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=9, weight="bold"),
+                     text_color=("#2563EB", "#38BDF8")).pack(anchor='w', pady=(2, 0))
+
+        # Active Account Banner
+        top_banner = ctk.CTkFrame(d_body, corner_radius=10,
+                                  fg_color=("#F0FDF4", "#064E3B"),
+                                  border_width=1, border_color=("#BBF7D0", "#047857"))
+        top_banner.pack(fill='x', pady=(0, 12), ipady=4)
+
+        lbl_active_acc = ctk.CTkLabel(top_banner, text="正在读取当前生效凭据…",
+                                      font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                                      text_color=("#15803D", "#34D399"))
+        lbl_active_acc.pack(anchor='w', padx=12, pady=6)
+
+        def sync_active_banner():
+            act = AuthVault.get_active_account_info()
+            em = act.get('email') or '未登录'
+            lbl_active_acc.configure(text=f"🟢 当前生效账号：{em} (所有工程与会话无缝续接)")
+
+        sync_active_banner()
+
+        # Section: Saved Accounts in Vault
+        ctk.CTkLabel(d_body, text="已收录的账号列表（点击直接热切换）：",
+                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                     text_color=("#1E293B", "#F1F5F9")).pack(anchor='w', pady=(0, 6))
+
+        list_scroll = ctk.CTkScrollableFrame(d_body, height=220, corner_radius=10,
+                                             fg_color=("#FFFFFF", "#2B2B2B"),
+                                             border_width=1, border_color=("#E2E8F0", "#383838"))
+        list_scroll.pack(fill='both', expand=True, pady=(0, 12))
+
+        def refresh_accounts():
+            for w in list_scroll.winfo_children():
+                w.destroy()
+
+            AuthVault.backup_current_to_vault()
+            saved = AuthVault.list_saved_accounts()
+            act = AuthVault.get_active_account_info()
+            active_email = act.get('email')
+
+            if not saved:
+                ctk.CTkLabel(list_scroll, text="暂无保存的账号凭据。点击下方【收录当前账号】即可添加。",
+                             font=ctk.CTkFont(family="Microsoft YaHei UI", size=9),
+                             text_color=("#94A3B8", "#64748B")).pack(pady=20)
+                return
+
+            for acc in saved:
+                em = acc['email']
+                nm = acc.get('name') or 'Codex User'
+                is_cur = (em == active_email)
+
+                row = ctk.CTkFrame(list_scroll, corner_radius=8,
+                                   fg_color=("#F0FDF4", "#064E3B") if is_cur else ("#F8FAFC", "#1E1E1E"),
+                                   border_width=1,
+                                   border_color=("#86EFAC", "#047857") if is_cur else ("#E2E8F0", "#333333"))
+                row.pack(fill='x', pady=3, padx=4)
+
+                r_in = ctk.CTkFrame(row, fg_color="transparent")
+                r_in.pack(fill='x', padx=10, pady=8)
+
+                col_info = ctk.CTkFrame(r_in, fg_color="transparent")
+                col_info.pack(side='left')
+
+                ctk.CTkLabel(col_info, text=f"👤 {em}",
+                             font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                             text_color=("#0F172A", "#F8FAFC")).pack(anchor='w')
+                ctk.CTkLabel(col_info, text=f"姓名/昵称: {nm}",
+                             font=ctk.CTkFont(family="Microsoft YaHei UI", size=8),
+                             text_color=("#64748B", "#94A3B8")).pack(anchor='w')
+
+                if is_cur:
+                    badge = ctk.CTkLabel(r_in, text="● 当前生效中",
+                                         font=ctk.CTkFont(family="Microsoft YaHei UI", size=9, weight="bold"),
+                                         text_color=("#15803D", "#34D399"))
+                    badge.pack(side='right', padx=6)
+                else:
+                    btn_sw = ctk.CTkButton(r_in, text="⚡ 切为此号",
+                                           font=ctk.CTkFont(family="Microsoft YaHei UI", size=9, weight="bold"),
+                                           width=80, height=26, corner_radius=6,
+                                           fg_color=("#2563EB", "#1D4ED8"),
+                                           hover_color=("#1D4ED8", "#1E40AF"),
+                                           command=lambda target_em=em: do_swap(target_em))
+                    btn_sw.pack(side='right', padx=4)
+
+        def do_swap(email: str):
+            if AuthVault.switch_to_account(email):
+                self.engine.reload_provider()
+                self.refresh_profile_ui()
+                sync_active_banner()
+                refresh_accounts()
+                self.check()
+                self.log(f"已一键热切换至账号：{email}！所有项目会话与历史数据 100% 完整保留。")
+
+        refresh_accounts()
+
+        # Bottom Actions Frame
+        b_frame = ctk.CTkFrame(d_body, fg_color="transparent")
+        b_frame.pack(fill='x')
+
+        def do_add_new():
+            AuthVault.backup_current_to_vault()
+            cmd = self.engine.provider.get_cli_cmd() + self.engine.provider.get_auth_options() + ['login', '--device-auth']
+            subprocess.Popen(cmd, env=self.engine.provider.get_env(), creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0)
+            self.log("已弹出浏览器登录窗口。完成登录后，点击下方【收录刚登录的账号】按钮即可保存！")
+
+        def do_capture_new():
+            new_em = AuthVault.backup_current_to_vault()
+            self.engine.reload_provider()
+            self.refresh_profile_ui()
+            sync_active_banner()
+            refresh_accounts()
+            self.check()
+            messagebox.showinfo("收录成功", f"新账号凭据 [{new_em}] 已成功收录！随时可一键切换。")
+            self.log(f"已收录新账号 [{new_em}] 至凭据库。")
+
+        btn_new_login = ctk.CTkButton(b_frame, text="➕ 登录另一个新账号...",
+                                      font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                                      height=32, corner_radius=8,
+                                      fg_color=("#F1F5F9", "#334155"),
+                                      hover_color=("#E2E8F0", "#475569"),
+                                      text_color=("#0F172A", "#F8FAFC"),
+                                      command=do_add_new)
+        btn_new_login.pack(side='left', padx=(0, 8))
+
+        btn_capture = ctk.CTkButton(b_frame, text="📥 收录刚登录的账号",
+                                    font=ctk.CTkFont(family="Microsoft YaHei UI", size=10, weight="bold"),
+                                    height=32, corner_radius=8,
+                                    fg_color=("#10B981", "#059669"),
+                                    hover_color=("#059669", "#047857"),
+                                    text_color="#FFFFFF",
+                                    command=do_capture_new)
+        btn_capture.pack(side='left')
+
+    # =========================================================================
+    # Scheduler Engine Interactions
+    # =========================================================================
 
     def toggle_pause(self) -> None:
         if self.engine.auto_active:
@@ -347,27 +860,34 @@ class App:
             if five_h.get('resetsAt'):
                 rst_5h = dt.datetime.fromtimestamp(five_h['resetsAt']).strftime('%m-%d %H:%M:%S')
             parts.append(f"5H 剩余 {rem_5h:g}%，刷新时间 {rst_5h}")
-            pct_color = '#15803D' if rem_5h > 30 else '#B45309' if rem_5h > 0 else '#B91C1C'
-            pct_bg = '#F0FDF4' if rem_5h > 30 else '#FEF3C7' if rem_5h > 0 else '#FEF2F2'
-            self.pill_pct.configure(text=f'🔋 5H额度: {rem_5h:g}%', bg=pct_bg, fg=pct_color)
-            self.pill_reset.configure(text=f'⏰ 5H刷新: {rst_5h}', bg='#EFF6FF', fg='#1D4ED8')
+
+            pct_color = "#10B981" if rem_5h > 30 else "#F59E0B" if rem_5h > 0 else "#EF4444"
+            self.lbl_5h_pct.configure(text=f"{rem_5h:g}%", text_color=pct_color)
+            self.prog_5h.configure(progress_color=pct_color)
+            self.prog_5h.set(rem_5h / 100.0)
+            self.lbl_5h_meta.configure(text=f"⏰ 刷新时间: {rst_5h}")
+            self.badge_5h_status.configure(text="正常对齐" if rem_5h > 0 else "已耗尽待重置",
+                                           text_color=pct_color)
 
         if weekly:
             rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
             rst_wk = dt.datetime.fromtimestamp(weekly['resetsAt']).strftime('%m-%d %H:%M:%S') if weekly.get('resetsAt') else '无'
             parts.append(f"周额度 剩余 {rem_wk:g}%，刷新时间 {rst_wk}")
-            wk_color = '#15803D' if rem_wk > 30 else '#B45309' if rem_wk > 0 else '#B91C1C'
-            wk_bg = '#F0FDF4' if rem_wk > 30 else '#FEF3C7' if rem_wk > 0 else '#FEF2F2'
-            self.pill_week.configure(text=f'📅 周额度: {rem_wk:g}%', bg=wk_bg, fg=wk_color)
+
+            wk_color = "#10B981" if rem_wk > 30 else "#F59E0B" if rem_wk > 0 else "#EF4444"
+            self.lbl_wk_pct.configure(text=f"{rem_wk:g}%", text_color=wk_color)
+            self.prog_wk.configure(progress_color=wk_color)
+            self.prog_wk.set(rem_wk / 100.0)
+            self.lbl_wk_meta.configure(text=f"📅 周刷新: {rst_wk}")
 
         allowed = data.get('ordinaryUsageAllowed')
         availability = '普通额度可用' if allowed is True else '普通额度不可用' if allowed is False else '可用性未提供'
         if allowed is True:
-            self.pill_avail.configure(text='✅ 普通额度: 可用', bg='#F0FDF4', fg='#15803D')
+            self.badge_wk_status.configure(text="普通额度可用", text_color="#10B981")
         elif allowed is False:
-            self.pill_avail.configure(text='⚠️ 普通额度: 不可用', bg='#FEF2F2', fg='#B91C1C')
+            self.badge_wk_status.configure(text="普通额度不可用", text_color="#EF4444")
         else:
-            self.pill_avail.configure(text='ℹ️ 普通额度: 未知', bg='#F1F5F9', fg='#64748B')
+            self.badge_wk_status.configure(text="额度状态正常", text_color="#64748B")
 
         self.quota.set('额度：' + ('；'.join(parts) if parts else '未返回 5 小时窗口') + '。' + availability)
         self.log(self.quota.get())
@@ -420,9 +940,9 @@ class App:
 
     def update_btn_state(self) -> None:
         if self.engine.auto_active:
-            self.btn_pause.configure(text='⏸  暂停自动刷新', bg='#D97706', activebackground='#B45309')
+            self.btn_pause.configure(text='⏸  暂停自动刷新', fg_color='#D97706', hover_color='#B45309')
         else:
-            self.btn_pause.configure(text='▶  恢复自动刷新', bg='#2563EB', activebackground='#1D4ED8')
+            self.btn_pause.configure(text='▶  恢复自动刷新', fg_color=('#2563EB', '#1D4ED8'), hover_color=('#1D4ED8', '#1E40AF'))
 
     def update_live_banner(self, mode: str, title: str, desc: str) -> None:
         key = (mode, title, desc)
@@ -431,17 +951,41 @@ class App:
         self._last_banner_key = key
 
         configs = {
-            'executing': {'bg': '#FEF3C7', 'border': '#F59E0B', 'title_fg': '#B45309', 'desc_fg': '#78350F'},
-            'checking': {'bg': '#EFF6FF', 'border': '#3B82F6', 'title_fg': '#1D4ED8', 'desc_fg': '#1E40AF'},
-            'scheduled': {'bg': '#ECFDF5', 'border': '#10B981', 'title_fg': '#047857', 'desc_fg': '#065F46'},
-            'waiting': {'bg': '#F0FDF4', 'border': '#34D399', 'title_fg': '#047857', 'desc_fg': '#065F46'},
-            'paused': {'bg': '#F1F5F9', 'border': '#CBD5E1', 'title_fg': '#475569', 'desc_fg': '#64748B'},
+            'executing': {
+                'card_fg': ("#FEF3C7", "#78350F"),
+                'card_border': ("#F59E0B", "#B45309"),
+                'title_fg': ("#B45309", "#FDE68A"),
+                'desc_fg': ("#92400E", "#FCD34D")
+            },
+            'checking': {
+                'card_fg': ("#EFF6FF", "#1E3A8A"),
+                'card_border': ("#3B82F6", "#2563EB"),
+                'title_fg': ("#1D4ED8", "#BFDBFE"),
+                'desc_fg': ("#1E40AF", "#93C5FD")
+            },
+            'scheduled': {
+                'card_fg': ("#ECFDF5", "#064E3B"),
+                'card_border': ("#10B981", "#059669"),
+                'title_fg': ("#047857", "#A7F3D0"),
+                'desc_fg': ("#065F46", "#6EE7B7")
+            },
+            'waiting': {
+                'card_fg': ("#F0FDF4", "#064E3B"),
+                'card_border': ("#34D399", "#059669"),
+                'title_fg': ("#047857", "#A7F3D0"),
+                'desc_fg': ("#065F46", "#6EE7B7")
+            },
+            'paused': {
+                'card_fg': ("#F1F5F9", "#27272A"),
+                'card_border': ("#CBD5E1", "#3F3F46"),
+                'title_fg': ("#475569", "#D4D4D8"),
+                'desc_fg': ("#64748B", "#A1A1AA")
+            },
         }
         cfg = configs.get(mode, configs['paused'])
-        self.banner_frame.configure(bg=cfg['bg'], highlightbackground=cfg['border'])
-        self.banner_inner.configure(bg=cfg['bg'])
-        self.banner_title.configure(text=title, bg=cfg['bg'], fg=cfg['title_fg'])
-        self.banner_desc.configure(text=desc, bg=cfg['bg'], fg=cfg['desc_fg'])
+        self.card_hero.configure(fg_color=cfg['card_fg'], border_color=cfg['card_border'])
+        self.lbl_hero_title.configure(text=title, text_color=cfg['title_fg'])
+        self.lbl_hero_desc.configure(text=desc, text_color=cfg['desc_fg'])
 
     def tick(self) -> None:
         self.engine.process_bus_events()
@@ -491,145 +1035,29 @@ class App:
         self.overlay_mgr.update()
         self.root.after(500, self.tick)
 
-    def login(self) -> None:
-        cmd = self.engine.provider.get_cli_cmd() + self.engine.provider.get_auth_options() + ['login', '--device-auth']
-        subprocess.Popen(cmd, env=self.engine.provider.get_env(), creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0)
-        self.log('已打开现有 CLI 的登录窗口。完成后点击“立即刷新额度”。')
-
     def refresh_profile_ui(self) -> None:
         info = self.engine.provider.get_account_info()
-        email = info.get('email')
         p_name = self.config.get_active_profile_name()
+        email = info.get('email')
         if email:
-            label = f"● 账号: {email}"
-            self.lbl_profile.configure(text=label, fg='#15803D')
+            txt = f"🟢 {email}"
+            self.btn_account_pill.configure(
+                text=txt,
+                fg_color=("#F0FDF4", "#064E3B"),
+                text_color=("#15803D", "#34D399")
+            )
         elif info.get('logged_in'):
-            self.lbl_profile.configure(text=f"● 账号: {p_name} (已登录)", fg='#15803D')
+            self.btn_account_pill.configure(
+                text=f"🟢 {p_name} (已登录)",
+                fg_color=("#F0FDF4", "#064E3B"),
+                text_color=("#15803D", "#34D399")
+            )
         else:
-            self.lbl_profile.configure(text=f"● 账号: {p_name} (未登录)", fg='#DC2626')
-
-    def open_account_manager(self) -> None:
-        from ..auth_vault import AuthVault
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title("👥 多账号凭据库（会话数据 100% 共享）")
-        dlg.geometry("540x510")
-        dlg.resizable(False, False)
-        dlg.configure(bg='#F8FAFC')
-        dlg.attributes('-topmost', True)
-
-        h_frame = tk.Frame(dlg, bg='#F8FAFC', padx=20, pady=14)
-        h_frame.pack(fill='x')
-        tk.Label(h_frame, text="👥 多账号凭据库 (Auth Vault)", font=('Microsoft YaHei UI', 12, 'bold'), bg='#F8FAFC', fg='#0F172A').pack(anchor='w')
-        tk.Label(h_frame, text="💡 换号只切换额度，所有项目会话、聊天历史、技能库 100% 全量共享保留！",
-                 font=('Microsoft YaHei UI', 8, 'bold'), bg='#F8FAFC', fg='#2563EB').pack(anchor='w', pady=(3, 0))
-
-        content = tk.Frame(dlg, bg='#FFFFFF', padx=18, pady=14, highlightthickness=1, highlightbackground='#E2E8F0')
-        content.pack(fill='both', expand=True, padx=16, pady=(0, 14))
-
-        # Top banner: current active account
-        top_box = tk.Frame(content, bg='#F0FDF4', highlightthickness=1, highlightbackground='#BBF7D0', padx=12, pady=8)
-        top_box.pack(fill='x', pady=(0, 12))
-
-        lbl_cur_acc = tk.Label(top_box, text="正在读取当前登录凭据…", font=('Microsoft YaHei UI', 9, 'bold'), bg='#F0FDF4', fg='#15803D')
-        lbl_cur_acc.pack(anchor='w')
-
-        def sync_active_banner():
-            act = AuthVault.get_active_account_info()
-            em = act.get('email') or '未登录'
-            lbl_cur_acc.configure(text=f"🟢 当前生效账号：{em} (所有会话无缝续接)")
-
-        sync_active_banner()
-
-        # Section: Saved Accounts in Vault
-        tk.Label(content, text="已收录的账号列表（点击直接热切换）：", font=('Microsoft YaHei UI', 9, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(anchor='w', pady=(0, 6))
-
-        list_frame = tk.Frame(content, bg='#FFFFFF')
-        list_frame.pack(fill='both', expand=True)
-
-        def refresh_accounts():
-            for w in list_frame.winfo_children():
-                w.destroy()
-
-            # Ensure current active is in vault
-            AuthVault.backup_current_to_vault()
-            saved = AuthVault.list_saved_accounts()
-            act = AuthVault.get_active_account_info()
-            active_email = act.get('email')
-
-            if not saved:
-                tk.Label(list_frame, text="暂无保存的账号凭据。点击下方【收录当前账号】即可添加。",
-                         font=('Microsoft YaHei UI', 8), bg='#FFFFFF', fg='#94A3B8').pack(pady=10)
-                return
-
-            for acc in saved:
-                em = acc['email']
-                is_active = (em == active_email)
-
-                row = tk.Frame(list_frame, bg='#EFF6FF' if is_active else '#F8FAFC',
-                               highlightthickness=1, highlightbackground='#3B82F6' if is_active else '#E2E8F0',
-                               padx=10, pady=7)
-                row.pack(fill='x', pady=3)
-
-                info_box = tk.Frame(row, bg=row['bg'])
-                info_box.pack(side='left', fill='x', expand=True)
-
-                tag = " [当前使用中]" if is_active else ""
-                acc_title = f"📧 {em}{tag}"
-                tk.Label(info_box, text=acc_title, font=('Microsoft YaHei UI', 9, 'bold' if is_active else 'normal'),
-                         bg=row['bg'], fg='#1D4ED8' if is_active else '#1E293B').pack(anchor='w')
-
-                if is_active:
-                    lbl_tag = tk.Label(row, text="● 生效中", font=('Microsoft YaHei UI', 8, 'bold'), bg='#EFF6FF', fg='#2563EB')
-                    lbl_tag.pack(side='right', padx=4)
-                else:
-                    btn_sw = tk.Button(row, text="⚡ 立即切为此号", bg='#2563EB', fg='#FFFFFF',
-                                       font=('Microsoft YaHei UI', 8, 'bold'), relief='flat', padx=8, pady=3, cursor='hand2',
-                                       command=lambda target_em=em: do_swap(target_em))
-                    btn_sw.pack(side='right', padx=4)
-
-        def do_swap(email: str):
-            if AuthVault.switch_to_account(email):
-                self.engine.reload_provider()
-                self.refresh_profile_ui()
-                sync_active_banner()
-                refresh_accounts()
-                self.check()
-                self.log(f"已一键热切换至账号：{email}！所有项目会话与历史数据 100% 完整保留。")
-
-        refresh_accounts()
-
-        # Bottom Actions Frame
-        b_frame = tk.Frame(content, bg='#FFFFFF', pady=10)
-        b_frame.pack(fill='x')
-
-        def do_add_new():
-            # 1. Back up current
-            AuthVault.backup_current_to_vault()
-            # 2. Open login console
-            cmd = self.engine.provider.get_cli_cmd() + self.engine.provider.get_auth_options() + ['login', '--device-auth']
-            subprocess.Popen(cmd, env=self.engine.provider.get_env(), creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0)
-            self.log("已弹出浏览器登录窗口。完成登录后，点击下方【收录新登录账号】按钮即可保存！")
-
-        def do_capture_new():
-            new_em = AuthVault.backup_current_to_vault()
-            self.engine.reload_provider()
-            self.refresh_profile_ui()
-            sync_active_banner()
-            refresh_accounts()
-            self.check()
-            messagebox.showinfo("收录成功", f"新账号凭据 [{new_em}] 已成功收录！随时可在一键切换。")
-            self.log(f"已收录新账号 [{new_em}] 至凭据库。")
-
-        btn_new_login = tk.Button(b_frame, text="➕ 登录另一个新账号...", bg='#F1F5F9', fg='#0F172A',
-                                  font=('Microsoft YaHei UI', 8, 'bold'), relief='flat', padx=10, pady=5, cursor='hand2',
-                                  command=do_add_new)
-        btn_new_login.pack(side='left', padx=(0, 8))
-
-        btn_capture = tk.Button(b_frame, text="📥 收录刚登录的账号", bg='#10B981', fg='#FFFFFF',
-                                font=('Microsoft YaHei UI', 8, 'bold'), relief='flat', padx=10, pady=5, cursor='hand2',
-                                command=do_capture_new)
-        btn_capture.pack(side='left')
+            self.btn_account_pill.configure(
+                text=f"🔴 {p_name} (未登录)",
+                fg_color=("#FEF2F2", "#7F1D1D"),
+                text_color=("#DC2626", "#FCA5A5")
+            )
 
     def restore_from_tray(self) -> None:
         self.root.deiconify()
@@ -666,6 +1094,8 @@ class App:
 
 
 def run_gui():
-    root = tk.Tk()
+    ctk.set_appearance_mode("System")  # Automatically matches Windows 11 Light/Dark theme!
+    ctk.set_default_color_theme("blue")
+    root = ctk.CTk()
     App(root)
     root.mainloop()
