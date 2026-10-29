@@ -103,7 +103,12 @@ class App:
         cb_overlay = tk.Checkbutton(header_right, text='🖥 桌面悬浮条', variable=self.show_overlay,
                                     command=self.toggle_overlay, bg='#F8FAFC', activebackground='#F8FAFC',
                                     fg='#1E293B', font=('Microsoft YaHei UI', 8, 'bold'), selectcolor='#FFFFFF', relief='flat', bd=0)
-        cb_overlay.pack(side='left', padx=(0, 10))
+        cb_overlay.pack(side='left', padx=(0, 4))
+
+        btn_overlay_style = create_btn(header_right, text='🎨 外观', command=self.open_overlay_settings,
+                                       bg='#F1F5F9', fg='#334155', hover_bg='#E2E8F0', border_color='#CBD5E1',
+                                       padx=8, pady=3, font=('Microsoft YaHei UI', 8))
+        btn_overlay_style.pack(side='left', padx=(0, 8))
 
         conn_box = tk.Frame(header_right, bg='#F0FDF4', highlightthickness=1, highlightbackground='#BBF7D0', padx=8, pady=4)
         conn_box.pack(side='left', padx=(0, 8))
@@ -275,6 +280,13 @@ class App:
     def toggle_overlay_from_tray(self) -> None:
         self.show_overlay.set(not self.show_overlay.get())
         self.toggle_overlay()
+
+    def open_overlay_settings(self) -> None:
+        """Open HUD appearance, background color, and opacity settings."""
+        if not self.show_overlay.get():
+            self.show_overlay.set(True)
+            self.toggle_overlay()
+        self.overlay_mgr.open_settings_dialog()
 
     def toggle_pause(self) -> None:
         if self.engine.auto_active:
