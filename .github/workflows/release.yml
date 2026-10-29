@@ -1,0 +1,64 @@
+name: Automated Release & Binary Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: Codex-5H-Reset.exe
+            asset_name: Codex-5H-Reset-Windows-x64.exe
+          - os: macos-latest
+            artifact_name: Codex-5H-Reset
+            asset_name: Codex-5H-Reset-macOS-x64
+          - os: ubuntu-latest
+            artifact_name: Codex-5H-Reset
+            asset_name: Codex-5H-Reset-Linux-x64
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Executable
+        run: |
+          python scripts/build_exe.py
+
+      - name: Rename Artifact
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv dist/Codex-5H-Reset.exe dist/${{ matrix.asset_name }}
+          else
+            mv dist/Codex-5H-Reset dist/${{ matrix.asset_name }}
+          fi
+
+      - name: Upload Binary to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

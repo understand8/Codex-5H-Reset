@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 Codex-5H-Reset Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+### Zero-Telemetry Guarantee & Privacy Statement
+
+1. **Local-Only Operation**: This software operates 100% locally on your machine. It communicates exclusively with your locally installed official `codex` CLI via standard input/output (stdio JSON-RPC IPC).
+2. **No Data Collection**: There are zero tracking beacons, zero analytics libraries, zero external telemetry endpoints, and zero data gathering mechanisms.
+3. **Credentials Safety**: Your authentication tokens reside untouched within your official CLI directory (e.g., `~/.codex/auth.json`). This software never uploads, copies, sniffs, or transmits credentials anywhere.
+4. **Third-Party Trademarks**: "OpenAI", "ChatGPT", and "Codex" are registered trademarks of OpenAI, Inc. This project is an independent, community-driven open source utility and is not affiliated with, endorsed by, or sponsored by OpenAI.

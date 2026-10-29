@@ -1,0 +1,40 @@
+name: Bug Report / 问题反馈
+description: 提交软件使用过程中发现的异常或缺陷
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你反馈 Bug！请详细填写以下信息以便定位问题。
+  - type: input
+    id: version
+    attributes:
+      label: 软件版本 / OS 环境
+      description: 例如 Codex-5H-Reset v2.0.0 / Windows 11 23H2 (x64)
+      placeholder: v2.0.0 / Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: run_mode
+    attributes:
+      label: 运行模式
+      options:
+        - 桌面 GUI 窗口 + 悬浮窗
+        - 桌面无头守护进程 (daemon)
+        - 纯 CLI (status / check / send)
+        - 单文件打包版 (.exe)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 异常现象描述
+      description: 发生了什么？与预期有哪些不符？
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 运行日志 (请注意脱敏隐私信息)
+      description: 软件界面底部的日志区域或控制台输出
+      render: shell

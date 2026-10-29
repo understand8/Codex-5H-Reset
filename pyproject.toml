@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-5h-reset"
+version = "2.0.0"
+description = "AI CLI Rate Limit Guard & 5-Hour Auto-Reset Scheduler with Desktop Overlay"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Codex-5H-Reset Contributors" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "Pillow>=10.0.0",
+    "pystray>=0.19.5",
+    "psutil>=5.9.0",
+    "requests>=2.28.0"
+]
+
+[project.scripts]
+codex-timer = "codex_timer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["codex_timer*"]
