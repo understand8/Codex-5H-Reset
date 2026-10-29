@@ -124,19 +124,19 @@ class SingleLineOverlay:
         self.lbl_wk.pack(side='left', padx=(0, 6))
 
         # ✕ 关闭按钮 (仅在 hover 或未固定时展示)
-        self.btn_close = tk.Label(self.main_f, text='✕', font=('Microsoft YaHei UI', 9),
-                                  bg=self.bg_color, fg='#9CA3AF', cursor='hand2')
-        self.btn_close.bind('<Button-1>', lambda e: self.close())
+        self.btn_close = tk.Label(self.main_f, text='✕', font=('Microsoft YaHei UI', 11, 'bold'),
+                                  bg=self.bg_color, fg='#9CA3AF', cursor='hand2', padx=5, pady=1)
+        self.btn_close.bind('<Button-1>', self._on_close_clicked)
 
         # 📌 固定/置顶切换按钮 (Hover 时展示)
-        self.btn_pin = tk.Label(self.main_f, text='📌', font=('Segoe UI Emoji', 9),
-                                bg=self.bg_color, fg='#38BDF8' if self.pinned else '#64748B', cursor='hand2')
-        self.btn_pin.bind('<Button-1>', lambda e: self.toggle_pin())
+        self.btn_pin = tk.Label(self.main_f, text='📌', font=('Segoe UI Emoji', 11),
+                                bg=self.bg_color, fg='#38BDF8' if self.pinned else '#64748B', cursor='hand2', padx=5, pady=1)
+        self.btn_pin.bind('<Button-1>', self._on_pin_clicked)
 
-        # 绑定通用事件（拖拽、右键菜单、鼠标滚轮、悬停进出）
-        all_widgets = [self.border_frame, self.main_f, self.lbl_drag, self.lbl_cd,
-                       self.sep1, self.lbl_5h, self.sep2, self.lbl_wk, self.btn_close, self.btn_pin]
-        for w in all_widgets:
+        # 拖拽相关控件 (注意：绝对不要将 btn_close 与 btn_pin 放入 drag_widgets，否则 Button-1 会被 _start_move 覆盖导致无法点击)
+        drag_widgets = [self.border_frame, self.main_f, self.lbl_drag, self.lbl_cd,
+                        self.sep1, self.lbl_5h, self.sep2, self.lbl_wk]
+        for w in drag_widgets:
             w.bind('<Button-1>', self._start_move)
             w.bind('<B1-Motion>', self._do_move)
             w.bind('<Button-3>', self._show_context_menu)
@@ -144,14 +144,35 @@ class SingleLineOverlay:
             w.bind('<Enter>', self._on_mouse_enter, add='+')
             w.bind('<Leave>', self._on_mouse_leave, add='+')
 
+        # 按钮专用悬停与菜单事件
+        for btn in (self.btn_close, self.btn_pin):
+            btn.bind('<Button-3>', self._show_context_menu)
+            btn.bind('<Enter>', self._on_mouse_enter, add='+')
+            btn.bind('<Leave>', self._on_mouse_leave, add='+')
+
+        self.btn_close.bind('<Enter>', lambda e: self.btn_close.configure(fg='#EF4444'), add='+')
+        self.btn_close.bind('<Leave>', lambda e: self.btn_close.configure(fg='#9CA3AF'), add='+')
+        self.btn_pin.bind('<Enter>', lambda e: self.btn_pin.configure(fg='#38BDF8'), add='+')
+        self.btn_pin.bind('<Leave>', lambda e: self.btn_pin.configure(fg='#38BDF8' if self.pinned else '#64748B'), add='+')
+
         # 悬停详细提示 (Tooltips)
         self._bind_tooltip(self.lbl_cd, lambda: f"下次发送时间：{self.app.when.get()} (右键可唤起外观菜单)")
         self._bind_tooltip(self.lbl_5h, self.app.get_5h_tooltip)
         self._bind_tooltip(self.lbl_wk, self.app.get_wk_tooltip)
         self._bind_tooltip(self.lbl_drag, lambda: "🔒 已固定（不可移动，移开鼠标淡化）" if self.pinned else "⋮⋮ 自由拖拽模式")
+        self._bind_tooltip(self.btn_pin, lambda: "📌 点击取消固定 (解锁为可拖拽)" if self.pinned else "📌 点击锁定固定 (锁定防误触+移开淡化)")
+        self._bind_tooltip(self.btn_close, lambda: "✕ 关闭隐藏桌面悬浮条")
 
         self._apply_visual_state()
         self.update()
+
+    def _on_close_clicked(self, event=None) -> str:
+        self.close()
+        return "break"
+
+    def _on_pin_clicked(self, event=None) -> str:
+        self.toggle_pin()
+        return "break"
 
     def _apply_visual_state(self) -> None:
         """Apply lock, faint background opacity, and hover controls."""
@@ -186,23 +207,37 @@ class SingleLineOverlay:
             self.btn_pin.pack(side='right', padx=(2, 0))
             self.btn_pin.configure(fg='#64748B')  # Inactive gray
 
-    def _on_mouse_enter(self, e) -> None:
-        self._is_hovered = True
-        self._apply_visual_state()
+    def _on_mouse_enter(self, e=None) -> None:
+        if hasattr(self, '_leave_timer') and self._leave_timer:
+            try:
+                self.overlay.after_cancel(self._leave_timer)
+            except Exception:
+                pass
+            self._leave_timer = None
+        if not self._is_hovered:
+            self._is_hovered = True
+            self._apply_visual_state()
 
-    def _on_mouse_leave(self, e) -> None:
-        # Delay check to confirm pointer really left the whole overlay window
+    def _on_mouse_leave(self, e=None) -> None:
+        if hasattr(self, '_leave_timer') and self._leave_timer:
+            try:
+                self.overlay.after_cancel(self._leave_timer)
+            except Exception:
+                pass
         if self.overlay:
-            self.overlay.after(35, self._check_leave)
+            self._leave_timer = self.overlay.after(180, self._check_leave)
 
     def _check_leave(self) -> None:
+        self._leave_timer = None
         if not self.overlay:
             return
         try:
             x, y = self.overlay.winfo_pointerxy()
             rx, ry = self.overlay.winfo_rootx(), self.overlay.winfo_rooty()
             rw, rh = self.overlay.winfo_width(), self.overlay.winfo_height()
-            if not (rx <= x <= rx + rw and ry <= y <= ry + rh):
+            # 允许 6px 容差边距，避免指针快速滑向边角按钮时发生抖动误关
+            margin = 6
+            if not (rx - margin <= x <= rx + rw + margin and ry - margin <= y <= ry + rh + margin):
                 self._is_hovered = False
                 self._apply_visual_state()
         except Exception:
