@@ -30,12 +30,12 @@ def cmd_status(config: ConfigManager) -> None:
         five_h, weekly = provider.extract_windows(data)
 
         if five_h:
-            rem_5h = max(0, 100 - five_h.get('usedPercent', 100))
+            rem_5h = max(0, min(100, 100 - five_h.get('usedPercent', 100)))
             rst_5h = dt.datetime.fromtimestamp(five_h['resetsAt']).strftime('%Y-%m-%d %H:%M:%S') if five_h.get('resetsAt') else '无'
             print(f"5小时额度: 剩余 {rem_5h:g}% | 下次刷新: {rst_5h}")
 
         if weekly:
-            rem_wk = max(0, 100 - weekly.get('usedPercent', 100))
+            rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
             rst_wk = dt.datetime.fromtimestamp(weekly['resetsAt']).strftime('%Y-%m-%d %H:%M:%S') if weekly.get('resetsAt') else '无'
             print(f"每周额度: 剩余 {rem_wk:g}% | 下次刷新: {rst_wk}")
 

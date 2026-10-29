@@ -19,6 +19,32 @@ class SingleLineOverlay:
         self.drag_x = 0
         self.drag_y = 0
 
+    def _clamp_and_snap(self, x: int, y: int, snap_dist: int = 16) -> tuple[int, int]:
+        """Keep overlay within screen boundaries and apply edge snapping."""
+        if not self.overlay:
+            return x, y
+        screen_w = self.overlay.winfo_screenwidth()
+        screen_h = self.overlay.winfo_screenheight()
+        w, h = 380, 36
+        max_x = max(0, screen_w - w)
+        max_y = max(0, screen_h - h - 48)  # Leave room for Windows taskbar
+
+        # Magnetic edge snapping
+        if abs(x) < snap_dist:
+            x = 0
+        elif abs(x - max_x) < snap_dist:
+            x = max_x
+
+        if abs(y) < snap_dist:
+            y = 0
+        elif abs(y - max_y) < snap_dist:
+            y = max_y
+
+        # Clamp strictly inside visible desktop area
+        x = max(0, min(max_x, x))
+        y = max(0, min(max_y, y))
+        return x, y
+
     def show(self) -> None:
         if self.overlay:
             try:
@@ -33,6 +59,7 @@ class SingleLineOverlay:
         self.overlay.attributes('-alpha', self.alpha)
         self.overlay.attributes('-topmost', self.pinned)
         self.overlay.configure(bg='#181A1D')
+        self.pos_x, self.pos_y = self._clamp_and_snap(self.pos_x, self.pos_y)
         self.overlay.geometry(f'380x36+{self.pos_x}+{self.pos_y}')
 
         border = tk.Frame(self.overlay, bg='#2F333A', padx=1, pady=1)
@@ -120,8 +147,9 @@ class SingleLineOverlay:
 
     def _do_move(self, e) -> None:
         if self.overlay:
-            x = e.x_root - self.drag_x
-            y = e.y_root - self.drag_y
+            raw_x = e.x_root - self.drag_x
+            raw_y = e.y_root - self.drag_y
+            x, y = self._clamp_and_snap(raw_x, raw_y)
             self.overlay.geometry(f'+{x}+{y}')
             self.pos_x, self.pos_y = x, y
             self.app.config.set('overlay_x', x, auto_save=False)
@@ -197,13 +225,13 @@ class SingleLineOverlay:
         rem_5h = 0
         hours = 5
         if five_h:
-            rem_5h = max(0, 100 - five_h.get('usedPercent', 100))
+            rem_5h = max(0, min(100, 100 - five_h.get('usedPercent', 100)))
             mins = five_h.get('windowDurationMins', 300)
             hours = mins // 60 if mins >= 60 else 5
 
         rem_wk = 0
         if weekly:
-            rem_wk = max(0, 100 - weekly.get('usedPercent', 100))
+            rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
 
         if self.app.busy and self.app.exec_state == 'sending':
             cd_text = '⚡ 发送中'

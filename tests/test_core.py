@@ -71,6 +71,15 @@ class TestCoreScheduler(unittest.TestCase):
         target = reset_target({})
         self.assertIsNone(target)
 
+    def test_boundary_missing_resets_at(self):
+        payload = {"rateLimits": {"primary": {"windowDurationMins": 300, "resetsAt": None}}}
+        self.assertIsNone(reset_target(payload))
+
+    def test_boundary_empty_rate_limits(self):
+        payload = {"rateLimits": {}}
+        self.assertEqual(five_hour(payload), {})
+        self.assertIsNone(reset_target(payload))
+
     def test_refresh_evidence_detects_reset(self):
         old_data = {"rateLimits": {"primary": {"windowDurationMins": 300, "resetsAt": 1000}}}
         new_data = {"rateLimits": {"primary": {"windowDurationMins": 300, "resetsAt": 2000}}, "ordinaryUsageAllowed": True}

@@ -307,7 +307,7 @@ class App:
         rem_5h = 0
         rst_5h = '无'
         if five_h:
-            rem_5h = max(0, 100 - five_h.get('usedPercent', 100))
+            rem_5h = max(0, min(100, 100 - five_h.get('usedPercent', 100)))
             if five_h.get('resetsAt'):
                 rst_5h = dt.datetime.fromtimestamp(five_h['resetsAt']).strftime('%m-%d %H:%M:%S')
             parts.append(f"5H 剩余 {rem_5h:g}%，刷新时间 {rst_5h}")
@@ -317,7 +317,7 @@ class App:
             self.pill_reset.configure(text=f'⏰ 5H刷新: {rst_5h}', bg='#EFF6FF', fg='#1D4ED8')
 
         if weekly:
-            rem_wk = max(0, 100 - weekly.get('usedPercent', 100))
+            rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
             rst_wk = dt.datetime.fromtimestamp(weekly['resetsAt']).strftime('%m-%d %H:%M:%S') if weekly.get('resetsAt') else '无'
             parts.append(f"周额度 剩余 {rem_wk:g}%，刷新时间 {rst_wk}")
             wk_color = '#15803D' if rem_wk > 30 else '#B45309' if rem_wk > 0 else '#B91C1C'
