@@ -5,6 +5,14 @@ import json
 import sys
 from typing import Optional
 
+# Ensure UTF-8 output on Windows consoles
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 from .config import ConfigManager
 from .core import SchedulerEngine
 from .providers.codex import CodexCLIProvider

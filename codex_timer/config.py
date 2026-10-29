@@ -6,14 +6,29 @@ from typing import Dict, Any, Optional
 
 DEFAULT_PROMPT = 'Reply with exactly OK. Do not use tools, read files, run commands, or perform any other actions.'
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_STATE_FILE = BASE_DIR / 'settings.json'
+
+
+def get_default_config_path() -> Path:
+    """Resolve config location with fallback to user home directory."""
+    env_cfg = os.environ.get('CODEX_TIMER_CONFIG')
+    if env_cfg:
+        return Path(env_cfg)
+    local_cfg = BASE_DIR / 'settings.json'
+    if local_cfg.exists():
+        return local_cfg
+    home_dir = Path.home() / '.codex_timer'
+    try:
+        home_dir.mkdir(parents=True, exist_ok=True)
+        return home_dir / 'settings.json'
+    except Exception:
+        return local_cfg
 
 
 class ConfigManager:
     """Thread-safe configuration & multi-account profile manager."""
 
     def __init__(self, state_file: Optional[Path] = None):
-        self.state_file = state_file or DEFAULT_STATE_FILE
+        self.state_file = state_file or get_default_config_path()
         self.data: Dict[str, Any] = self._default_config()
         self.load()
 

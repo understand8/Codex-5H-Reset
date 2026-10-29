@@ -5,6 +5,21 @@
 import sys
 import os
 
+if sys.platform == 'win32':
+    try:
+        if len(sys.argv) > 1:
+            import ctypes
+            # Attach to parent console if invoked from terminal in --windowed mode
+            if ctypes.windll.kernel32.AttachConsole(-1):
+                sys.stdout = open('CONOUT$', 'w', encoding='utf-8', errors='replace')
+                sys.stderr = open('CONOUT$', 'w', encoding='utf-8', errors='replace')
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # Ensure package import works when run directly as a script
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

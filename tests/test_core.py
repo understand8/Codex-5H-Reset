@@ -85,20 +85,29 @@ class TestCoreScheduler(unittest.TestCase):
         self.assertIn("尚未确认 5 小时窗口刷新", msg)
 
     def test_scheduler_sync_reset(self):
-        engine = SchedulerEngine()
-        target_ts = int(time.time()) + 600
-        engine.latest = {
-            "rateLimits": {
-                "primary": {
-                    "windowDurationMins": 300,
-                    "usedPercent": 80,
-                    "resetsAt": target_ts
+        import tempfile
+        from pathlib import Path
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tf:
+            temp_path = Path(tf.name)
+        try:
+            cfg = ConfigManager(state_file=temp_path)
+            engine = SchedulerEngine(config=cfg, log_callback=lambda _: None)
+            target_ts = int(time.time()) + 600
+            engine.latest = {
+                "rateLimits": {
+                    "primary": {
+                        "windowDurationMins": 300,
+                        "usedPercent": 80,
+                        "resetsAt": target_ts
+                    }
                 }
             }
-        }
-        engine.sync_reset()
-        self.assertEqual(engine.next_at, target_ts + 120)
-        self.assertEqual(engine.scheduled_reset, f"codex/primary:{target_ts}")
+            engine.sync_reset()
+            self.assertEqual(engine.next_at, target_ts + 120)
+            self.assertEqual(engine.scheduled_reset, f"codex/primary:{target_ts}")
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
 
 if __name__ == "__main__":
