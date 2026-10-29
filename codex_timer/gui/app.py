@@ -125,12 +125,14 @@ class App:
                                        padx=8, pady=3, font=('Microsoft YaHei UI', 8))
         btn_overlay_style.pack(side='left', padx=(0, 8))
 
-        conn_box = tk.Frame(header_right, bg='#F0FDF4', highlightthickness=1, highlightbackground='#BBF7D0', padx=8, pady=4)
+        conn_box = tk.Frame(header_right, bg='#F0FDF4', highlightthickness=1, highlightbackground='#BBF7D0', padx=8, pady=4, cursor='hand2')
         conn_box.pack(side='left', padx=(0, 8))
-        self.lbl_profile = tk.Label(conn_box, text=f"● 账号: {self.config.get_active_profile_name()}", font=('Microsoft YaHei UI', 8, 'bold'), bg='#F0FDF4', fg='#15803D')
+        self.lbl_profile = tk.Label(conn_box, text=f"● 账号: {self.config.get_active_profile_name()}", font=('Microsoft YaHei UI', 8, 'bold'), bg='#F0FDF4', fg='#15803D', cursor='hand2')
         self.lbl_profile.pack()
+        conn_box.bind('<Button-1>', lambda e: self.open_account_manager())
+        self.lbl_profile.bind('<Button-1>', lambda e: self.open_account_manager())
 
-        btn_login = create_btn(header_right, text='重新登录 CLI', command=self.login, bg='#FFFFFF', fg='#475569', hover_bg='#F1F5F9', border_color='#CBD5E1', padx=10, pady=4, font=('Microsoft YaHei UI', 8, 'bold'))
+        btn_login = create_btn(header_right, text='👥 多账号管理', command=self.open_account_manager, bg='#FFFFFF', fg='#475569', hover_bg='#F1F5F9', border_color='#CBD5E1', padx=10, pady=4, font=('Microsoft YaHei UI', 8, 'bold'))
         btn_login.pack(side='left')
 
         # 2. Quota Card
@@ -334,6 +336,7 @@ class App:
 
     def show_limits(self, data: Dict[str, Any]) -> None:
         self.engine.latest = data
+        self.refresh_profile_ui()
         five_h, weekly = self.get_extracted_windows()
         parts = []
 
@@ -492,6 +495,127 @@ class App:
         cmd = self.engine.provider.get_cli_cmd() + self.engine.provider.get_auth_options() + ['login', '--device-auth']
         subprocess.Popen(cmd, env=self.engine.provider.get_env(), creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0)
         self.log('已打开现有 CLI 的登录窗口。完成后点击“立即刷新额度”。')
+
+    def refresh_profile_ui(self) -> None:
+        info = self.engine.provider.get_account_info()
+        email = info.get('email')
+        p_name = self.config.get_active_profile_name()
+        if email:
+            label = f"● 账号: {email}"
+            self.lbl_profile.configure(text=label, fg='#15803D')
+        elif info.get('logged_in'):
+            self.lbl_profile.configure(text=f"● 账号: {p_name} (已登录)", fg='#15803D')
+        else:
+            self.lbl_profile.configure(text=f"● 账号: {p_name} (未登录)", fg='#DC2626')
+
+    def open_account_manager(self) -> None:
+        dlg = tk.Toplevel(self.root)
+        dlg.title("👥 多账号 Profile 管理")
+        dlg.geometry("520x460")
+        dlg.resizable(False, False)
+        dlg.configure(bg='#F8FAFC')
+        dlg.attributes('-topmost', True)
+
+        h_frame = tk.Frame(dlg, bg='#F8FAFC', padx=20, pady=16)
+        h_frame.pack(fill='x')
+        tk.Label(h_frame, text="👥 多账号隔离与切换", font=('Microsoft YaHei UI', 12, 'bold'), bg='#F8FAFC', fg='#0F172A').pack(anchor='w')
+        tk.Label(h_frame, text="每个账号拥有独立的存储目录，登录互不冲掉，可自由切换", font=('Microsoft YaHei UI', 8), bg='#F8FAFC', fg='#64748B').pack(anchor='w', pady=(2, 0))
+
+        content = tk.Frame(dlg, bg='#FFFFFF', padx=18, pady=14, highlightthickness=1, highlightbackground='#E2E8F0')
+        content.pack(fill='both', expand=True, padx=16, pady=(0, 16))
+
+        tk.Label(content, text="已配置的账号列表：", font=('Microsoft YaHei UI', 9, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(anchor='w', pady=(0, 8))
+
+        list_frame = tk.Frame(content, bg='#FFFFFF')
+        list_frame.pack(fill='both', expand=True)
+
+        def refresh_list():
+            for w in list_frame.winfo_children():
+                w.destroy()
+            cur_active = self.config.get_active_profile_name()
+            for pid, pdata in self.config.get_profiles().items():
+                row = tk.Frame(list_frame, bg='#F8FAFC' if pid == cur_active else '#FFFFFF',
+                               highlightthickness=1, highlightbackground='#3B82F6' if pid == cur_active else '#E2E8F0',
+                               padx=10, pady=6)
+                row.pack(fill='x', pady=3)
+
+                is_cur = (pid == cur_active)
+                tag_txt = "当前生效" if is_cur else "切换此账号"
+                tag_bg = '#EFF6FF' if is_cur else '#F1F5F9'
+                tag_fg = '#2563EB' if is_cur else '#475569'
+
+                from ..providers.codex import CodexCLIProvider
+                prov = CodexCLIProvider(codex_home=Path(pdata.get('codex_home', '')))
+                info = prov.get_account_info()
+                acc_email = info.get('email') or '未读取到凭证/需登录'
+
+                info_box = tk.Frame(row, bg=row['bg'])
+                info_box.pack(side='left', fill='x', expand=True)
+                name_lbl = tk.Label(info_box, text=f"[{pid}] {pdata.get('name')}", font=('Microsoft YaHei UI', 9, 'bold'),
+                                    bg=row['bg'], fg='#0F172A')
+                name_lbl.pack(anchor='w')
+                path_lbl = tk.Label(info_box, text=f"邮箱: {acc_email}  •  目录: {pdata.get('codex_home')}",
+                                    font=('Consolas', 8), bg=row['bg'], fg='#64748B')
+                path_lbl.pack(anchor='w')
+
+                btn_sw = tk.Button(row, text=tag_txt, bg=tag_bg, fg=tag_fg, font=('Microsoft YaHei UI', 8, 'bold'),
+                                   relief='flat', padx=8, pady=2, cursor='hand2',
+                                   command=lambda p=pid: do_switch(p))
+                btn_sw.pack(side='right', padx=(4, 0))
+
+                btn_log = tk.Button(row, text="登录/重登", bg='#FFFFFF', fg='#0F172A', font=('Microsoft YaHei UI', 8),
+                                    relief='flat', padx=6, pady=2, cursor='hand2',
+                                    command=lambda p=pid: do_login_profile(p))
+                btn_log.pack(side='right')
+
+        def do_switch(pid: str):
+            self.config.set_active_profile(pid)
+            self.engine.reload_provider()
+            self.refresh_profile_ui()
+            self.check()
+            refresh_list()
+            self.log(f"已切换活跃账号为：[{pid}]")
+
+        def do_login_profile(pid: str):
+            pdata = self.config.get_profiles().get(pid, {})
+            phome = Path(pdata.get('codex_home', ''))
+            from ..providers.codex import CodexCLIProvider
+            prov = CodexCLIProvider(codex_home=phome)
+            cmd = prov.get_cli_cmd() + prov.get_auth_options() + ['login', '--device-auth']
+            subprocess.Popen(cmd, env=prov.get_env(), creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0)
+            self.log(f"已打开账号 [{pid}] 的独立登录窗口。完成后切换此账号并刷新额度。")
+
+        refresh_list()
+
+        # Add profile row
+        add_frame = tk.Frame(content, bg='#FFFFFF', pady=8)
+        add_frame.pack(fill='x')
+        tk.Label(add_frame, text="➕ 快捷添加新独立账号：", font=('Microsoft YaHei UI', 8, 'bold'), bg='#FFFFFF', fg='#1E293B').pack(anchor='w')
+
+        add_input = tk.Frame(add_frame, bg='#FFFFFF')
+        add_input.pack(fill='x', pady=(4, 0))
+
+        e_id = tk.Entry(add_input, width=12, font=('Consolas', 9), bg='#F8FAFC', relief='flat', highlightthickness=1, highlightbackground='#CBD5E1')
+        e_id.insert(0, 'work')
+        e_id.pack(side='left', padx=(0, 6), ipady=2)
+
+        e_name = tk.Entry(add_input, width=14, font=('Microsoft YaHei UI', 9), bg='#F8FAFC', relief='flat', highlightthickness=1, highlightbackground='#CBD5E1')
+        e_name.insert(0, '工作副号')
+        e_name.pack(side='left', padx=(0, 6), ipady=2)
+
+        def add_new():
+            pid = e_id.get().strip()
+            name = e_name.get().strip()
+            if not pid or not name:
+                return
+            new_home = str(Path.home() / f".codex-{pid}")
+            self.config.add_profile(pid, name, new_home)
+            refresh_list()
+            self.log(f"已创建新账号环境 [{pid}] ({new_home})，请点击【登录/重登】完成独立认证。")
+
+        btn_add = tk.Button(add_input, text="添加此账号", bg='#2563EB', fg='#FFFFFF', font=('Microsoft YaHei UI', 8, 'bold'),
+                            relief='flat', padx=8, pady=2, cursor='hand2', command=add_new)
+        btn_add.pack(side='left')
 
     def restore_from_tray(self) -> None:
         self.root.deiconify()

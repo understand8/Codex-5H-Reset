@@ -49,6 +49,27 @@ class CodexCLIProvider(BaseRateLimitProvider):
     def is_logged_in(self) -> bool:
         return (self.codex_home / 'auth.json').exists()
 
+    def get_account_info(self) -> Dict[str, str]:
+        """Extract user email and display name from auth tokens without exposing secrets."""
+        auth_file = self.codex_home / 'auth.json'
+        info = {'email': '', 'name': '', 'logged_in': False}
+        if not auth_file.exists():
+            return info
+        info['logged_in'] = True
+        try:
+            import base64
+            data = json.loads(auth_file.read_text(encoding='utf-8'))
+            id_tok = data.get('tokens', {}).get('id_token')
+            if id_tok and '.' in id_tok:
+                payload_b64 = id_tok.split('.')[1]
+                payload_b64 += '=' * ((4 - len(payload_b64) % 4) % 4)
+                payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()))
+                info['email'] = payload.get('email', '')
+                info['name'] = payload.get('name', '')
+        except Exception:
+            pass
+        return info
+
     def get_cli_cmd(self) -> List[str]:
         # Cross-platform CLI resolution
         node = shutil.which('node')

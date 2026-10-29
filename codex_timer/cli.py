@@ -23,7 +23,11 @@ def cmd_status(config: ConfigManager) -> None:
     print("\n=== Codex-5H-Reset 状态概览 ===")
     print(f"当前生效账号 Profile: {config.get_active_profile_name()}")
     print(f"CLI 认证目录: {provider.codex_home}")
-    print(f"登录状态: {'已登录' if provider.is_logged_in() else '未登录'}")
+    info = provider.get_account_info()
+    if info.get('email'):
+        print(f"登录账号: {info['email']}" + (f" ({info['name']})" if info.get('name') else ""))
+    else:
+        print(f"登录状态: {'已登录' if provider.is_logged_in() else '未登录'}")
 
     try:
         data = provider.read_limits(timeout=15)
