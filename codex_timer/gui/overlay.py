@@ -507,10 +507,19 @@ class SingleLineOverlay:
             cd_text = '⏸ 已暂停'
             cd_fg = '#9CA3AF'
 
-        self.lbl_cd.configure(text=cd_text, fg=cd_fg)
+        # Dirty-check cache to prevent redundant Tkinter redraws (0.0% CPU)
+        if (cd_text, cd_fg) != getattr(self, '_last_cd', None):
+            self.lbl_cd.configure(text=cd_text, fg=cd_fg)
+            self._last_cd = (cd_text, cd_fg)
 
         fg_5h = '#10B981' if rem_5h > 30 else '#F59E0B' if rem_5h > 0 else '#EF4444'
-        self.lbl_5h.configure(text=f'{hours}H: {rem_5h:g}%', fg=fg_5h)
+        text_5h = f'{hours}H: {rem_5h:g}%'
+        if (text_5h, fg_5h) != getattr(self, '_last_5h', None):
+            self.lbl_5h.configure(text=text_5h, fg=fg_5h)
+            self._last_5h = (text_5h, fg_5h)
 
         fg_wk = '#10B981' if rem_wk > 30 else '#F59E0B' if rem_wk > 0 else '#EF4444'
-        self.lbl_wk.configure(text=f'Week: {rem_wk:g}%', fg=fg_wk)
+        text_wk = f'Week: {rem_wk:g}%'
+        if (text_wk, fg_wk) != getattr(self, '_last_wk', None):
+            self.lbl_wk.configure(text=text_wk, fg=fg_wk)
+            self._last_wk = (text_wk, fg_wk)

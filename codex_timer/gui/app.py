@@ -79,6 +79,21 @@ class App:
         root.resizable(False, False)
         root.configure(bg='#F8FAFC')
 
+        # Load and set taskbar and titlebar feather icon
+        icon_png = BASE_DIR / 'assets' / 'icon.png'
+        icon_ico = BASE_DIR / 'assets' / 'icon.ico'
+        if icon_png.exists():
+            try:
+                self._app_icon_img = tk.PhotoImage(file=str(icon_png))
+                root.iconphoto(False, self._app_icon_img)
+            except Exception:
+                pass
+        if sys.platform == 'win32' and icon_ico.exists():
+            try:
+                root.iconbitmap(str(icon_ico))
+            except Exception:
+                pass
+
         body = tk.Frame(root, bg='#F8FAFC', padx=22, pady=16)
         body.pack(fill='both', expand=True)
 
@@ -260,6 +275,12 @@ class App:
         line = f"[{ts}] {value}\n"
         self.logs.configure(state='normal')
         self.logs.insert('end', line)
+        try:
+            line_count = int(self.logs.index('end-1c').split('.')[0])
+            if line_count > 200:
+                self.logs.delete('1.0', f'{line_count - 180}.0')
+        except Exception:
+            pass
         self.logs.see('end')
         self.logs.configure(state='disabled')
         with (BASE_DIR / 'activity.log').open('a', encoding='utf-8') as f:
@@ -401,6 +422,11 @@ class App:
             self.btn_pause.configure(text='▶  恢复自动刷新', bg='#2563EB', activebackground='#1D4ED8')
 
     def update_live_banner(self, mode: str, title: str, desc: str) -> None:
+        key = (mode, title, desc)
+        if getattr(self, '_last_banner_key', None) == key:
+            return
+        self._last_banner_key = key
+
         configs = {
             'executing': {'bg': '#FEF3C7', 'border': '#F59E0B', 'title_fg': '#B45309', 'desc_fg': '#78350F'},
             'checking': {'bg': '#EFF6FF', 'border': '#3B82F6', 'title_fg': '#1D4ED8', 'desc_fg': '#1E40AF'},
@@ -460,7 +486,7 @@ class App:
             self.status.set('已暂停')
 
         self.overlay_mgr.update()
-        self.root.after(300, self.tick)
+        self.root.after(500, self.tick)
 
     def login(self) -> None:
         cmd = self.engine.provider.get_cli_cmd() + self.engine.provider.get_auth_options() + ['login', '--device-auth']

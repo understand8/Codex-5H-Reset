@@ -1,10 +1,20 @@
 """System Tray Manager using pystray."""
+from pathlib import Path
 import pystray
 from PIL import Image, ImageDraw
 from typing import Any, Optional
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
 
 def make_tray_icon() -> Image.Image:
+    """Load high-res feather icon from assets, with procedural fallback."""
+    icon_path = BASE_DIR / 'assets' / 'icon.png'
+    if icon_path.exists():
+        try:
+            return Image.open(icon_path).convert('RGBA')
+        except Exception:
+            pass
     img = Image.new('RGBA', (64, 64), color=(0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.ellipse((2, 2, 62, 62), fill='#2563EB')
