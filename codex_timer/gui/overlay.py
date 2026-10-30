@@ -562,7 +562,7 @@ class SingleLineOverlay:
         hours = 5
         if five_h:
             rem_5h = max(0, min(100, 100 - five_h.get('usedPercent', 100)))
-            mins = five_h.get('windowDurationMins', 300)
+            mins = five_h.get('windowDurationMins') or 300
             hours = mins // 60 if mins >= 60 else 5
 
         rem_wk = 0
@@ -592,13 +592,13 @@ class SingleLineOverlay:
             self._last_cd = (cd_text, cd_fg)
 
         fg_5h = '#10B981' if rem_5h > 30 else '#F59E0B' if rem_5h > 0 else '#EF4444'
-        text_5h = f'{hours}H: {rem_5h:g}%'
+        text_5h = f'{hours}H: {rem_5h:g}%' if five_h else '5H: --'
         if (text_5h, fg_5h) != getattr(self, '_last_5h', None):
             self.lbl_5h.configure(text=text_5h, fg=fg_5h)
             self._last_5h = (text_5h, fg_5h)
 
         fg_wk = '#10B981' if rem_wk > 30 else '#F59E0B' if rem_wk > 0 else '#EF4444'
-        text_wk = f'Week: {rem_wk:g}%'
+        text_wk = f'Week: {rem_wk:g}%' if weekly else 'Week: --'
         if (text_wk, fg_wk) != getattr(self, '_last_wk', None):
             self.lbl_wk.configure(text=text_wk, fg=fg_wk)
             self._last_wk = (text_wk, fg_wk)

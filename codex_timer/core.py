@@ -54,9 +54,14 @@ def refresh_evidence(before: Dict[str, Any], after: Dict[str, Any]) -> str:
 class SchedulerEngine:
     """Decoupled Core Scheduling Engine for Headless CLI Daemon and GUI alike."""
 
-    def __init__(self, config: Optional[ConfigManager] = None, log_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self, config: Optional[ConfigManager] = None,
+                 log_callback: Optional[Callable[[str], None]] = None,
+                 limits_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+                 error_callback: Optional[Callable[[str], None]] = None):
         self.config = config or ConfigManager()
         self.log_callback = log_callback or self._default_log
+        self.limits_callback = limits_callback
+        self.error_callback = error_callback
         self.provider = CodexCLIProvider(codex_home=self.config.get_active_codex_home())
 
         self.bus = queue.Queue()
@@ -217,6 +222,11 @@ class SchedulerEngine:
                 if kind == 'limits':
                     self.latest = val
                     self.sync_reset()
+                    if self.limits_callback:
+                        try:
+                            self.limits_callback(val)
+                        except Exception as e:
+                            logger.exception("limits_callback error: %s", e)
                     wh_cfg = self.config.get('webhooks', {})
                     if wh_cfg.get('notify_on_refresh'):
                         # Trigger webhook if quota is reset
@@ -225,6 +235,11 @@ class SchedulerEngine:
                     self.exec_detail = val
                 elif kind in ('error', 'log'):
                     self.log(str(val))
+                    if kind == 'error' and self.error_callback:
+                        try:
+                            self.error_callback(str(val))
+                        except Exception as e:
+                            logger.exception("error_callback error: %s", e)
                 elif kind == 'notice':
                     self.log(f"{val[0]}：{val[1]}")
                 elif kind == 'success_scheduled':

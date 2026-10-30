@@ -118,6 +118,24 @@ class TestCoreScheduler(unittest.TestCase):
             if temp_path.exists():
                 temp_path.unlink()
 
+    def test_process_bus_events_invokes_limits_and_error_callbacks(self):
+        received_limits = []
+        received_errors = []
+        engine = SchedulerEngine(
+            log_callback=lambda _: None,
+            limits_callback=lambda data: received_limits.append(data),
+            error_callback=lambda err: received_errors.append(err)
+        )
+        sample_data = {"rateLimits": {"primary": {"windowDurationMins": 300, "usedPercent": 50}}}
+        engine.bus.put(('limits', sample_data))
+        engine.bus.put(('error', 'Network test failure'))
+        engine.process_bus_events()
+
+        self.assertEqual(len(received_limits), 1)
+        self.assertEqual(received_limits[0], sample_data)
+        self.assertEqual(len(received_errors), 1)
+        self.assertEqual(received_errors[0], 'Network test failure')
+
 
 if __name__ == "__main__":
     unittest.main()

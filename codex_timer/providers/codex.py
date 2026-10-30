@@ -156,7 +156,7 @@ class CodexCLIProvider(BaseRateLimitProvider):
                 w = snap.get(slot)
                 if not w:
                     continue
-                mins = w.get('windowDurationMins', 0)
+                mins = w.get('windowDurationMins') or 0
                 if mins == 300 and five_h is None:
                     five_h = w
                 elif mins >= 10000 and weekly is None:

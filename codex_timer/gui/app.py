@@ -43,7 +43,12 @@ class App:
     def __init__(self, root: ctk.CTk, config: Optional[ConfigManager] = None):
         self.root = root
         self.config = config or ConfigManager()
-        self.engine = SchedulerEngine(config=self.config, log_callback=self._on_engine_log)
+        self.engine = SchedulerEngine(
+            config=self.config,
+            log_callback=self._on_engine_log,
+            limits_callback=self.show_limits,
+            error_callback=self.show_limits_error
+        )
 
         # UI State variables
         self.when = tk.StringVar(value=(dt.datetime.now() + dt.timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'))
@@ -116,6 +121,9 @@ class App:
         self.load()
         self.tray_mgr.start()
         self.update_btn_state()
+
+        if self.engine.latest:
+            self.show_limits(self.engine.latest)
 
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.bind('<Destroy>', self.on_destroy)
@@ -852,6 +860,8 @@ class App:
         self.resume()
 
     def check(self) -> None:
+        self.badge_5h_status.configure(text="正在读取", text_color="#2563EB", fg_color=("#EFF6FF", "#1E293B"))
+        self.lbl_5h_meta.configure(text="⏰ 刷新时间: 正在检测...", text_color=("#1E40AF", "#60A5FA"))
         self.engine.check()
 
     def send_now(self, scheduled: bool = False) -> None:
@@ -859,6 +869,7 @@ class App:
 
     def show_limits(self, data: Dict[str, Any]) -> None:
         self.engine.latest = data
+        self._last_rendered_limits = data
         self.refresh_profile_ui()
         five_h, weekly = self.get_extracted_windows()
         parts = []
@@ -882,6 +893,11 @@ class App:
                 self.badge_5h_status.configure(text="额度见底", text_color="#B45309", fg_color=("#FEF3C7", "#78350F"))
             else:
                 self.badge_5h_status.configure(text="已耗尽·待重置", text_color="#B91C1C", fg_color=("#FEE2E2", "#7F1D1D"))
+        else:
+            self.lbl_5h_pct.configure(text="--%", text_color=("#64748B", "#94A3B8"))
+            self.prog_5h.set(0.0)
+            self.badge_5h_status.configure(text="未获取到", text_color="#64748B", fg_color=("#F1F5F9", "#1E293B"))
+            self.lbl_5h_meta.configure(text="⏰ 刷新时间: 暂无窗口", text_color=("#64748B", "#94A3B8"))
 
         if weekly:
             rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
@@ -893,6 +909,10 @@ class App:
             self.prog_wk.configure(progress_color=wk_color)
             self.prog_wk.set(rem_wk / 100.0)
             self.lbl_wk_meta.configure(text=f"📅 周刷新: {rst_wk}", text_color=wk_color)
+        else:
+            self.lbl_wk_pct.configure(text="--%", text_color=("#64748B", "#94A3B8"))
+            self.prog_wk.set(0.0)
+            self.lbl_wk_meta.configure(text="📅 周刷新: 暂无窗口", text_color=("#64748B", "#94A3B8"))
 
         allowed = data.get('ordinaryUsageAllowed')
         availability = '普通额度可用' if allowed is True else '普通额度不可用' if allowed is False else '可用性未提供'
@@ -903,8 +923,19 @@ class App:
         else:
             self.badge_wk_status.configure(text="额度状态正常", text_color="#2563EB", fg_color=("#EFF6FF", "#1E293B"))
 
-        self.quota.set('额度：' + ('；'.join(parts) if parts else '未返回 5 小时窗口') + '。' + availability)
-        self.log(self.quota.get())
+        quota_summary = '额度：' + ('；'.join(parts) if parts else '未返回 5 小时窗口') + '。' + availability
+        self.quota.set(quota_summary)
+        if getattr(self, '_last_logged_quota', None) != quota_summary:
+            self._last_logged_quota = quota_summary
+            self.log(quota_summary)
+        self.engine.sync_reset()
+        self.overlay_mgr.update()
+
+    def show_limits_error(self, err_msg: str) -> None:
+        self.badge_5h_status.configure(text="读取失败", text_color="#B91C1C", fg_color=("#FEE2E2", "#7F1D1D"))
+        self.lbl_5h_meta.configure(text="⏰ 额度读取失败，请检查登录或网络", text_color="#DC2626")
+        self.badge_wk_status.configure(text="读取失败", text_color="#B91C1C", fg_color=("#FEE2E2", "#7F1D1D"))
+        self.lbl_wk_meta.configure(text="📅 周额度检测失败", text_color="#DC2626")
         self.engine.sync_reset()
         self.overlay_mgr.update()
 
@@ -1003,6 +1034,9 @@ class App:
 
     def tick(self) -> None:
         self.engine.process_bus_events()
+
+        if self.engine.latest and self.engine.latest != getattr(self, '_last_rendered_limits', None):
+            self.show_limits(self.engine.latest)
 
         if self.engine.next_at and not self.engine.busy and time.time() >= self.engine.next_at:
             self.engine.send_now(scheduled=True)
