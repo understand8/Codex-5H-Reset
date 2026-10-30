@@ -27,6 +27,33 @@ class TestAuthVault(unittest.TestCase):
         self.assertEqual(info['email'], 'test@domain.com')
         self.assertEqual(info['name'], 'Tester')
 
+    def test_import_and_saved_check(self):
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td) / '.codex'
+            fake_home.mkdir(parents=True)
+            fake_auth = fake_home / 'auth.json'
+            payload_b64 = "eyJlbWFpbCI6ICJ2YXVsdEBkb21haW4uY29tIiwgIm5hbWUiOiAiVmF1bHQgVXNlciJ9"
+            fake_auth.write_text(json.dumps({'tokens': {'id_token': f'h.{payload_b64}.s'}}), encoding='utf-8')
+
+            import codex_timer.auth_vault as av_mod
+            orig_home = av_mod.DEFAULT_CODEX_HOME
+            orig_vault = av_mod.VAULT_DIR
+            try:
+                av_mod.DEFAULT_CODEX_HOME = fake_home
+                av_mod.VAULT_DIR = fake_home / 'auth_vault'
+                
+                self.assertFalse(AuthVault.is_current_desktop_saved())
+                saved_em = AuthVault.import_current_desktop_account()
+                self.assertEqual(saved_em, 'vault@domain.com')
+                self.assertTrue(AuthVault.is_current_desktop_saved())
+
+                # Test sync
+                synced = AuthVault.sync_if_known_account()
+                self.assertEqual(synced, 'vault@domain.com')
+            finally:
+                av_mod.DEFAULT_CODEX_HOME = orig_home
+                av_mod.VAULT_DIR = orig_vault
+
 
 if __name__ == "__main__":
     unittest.main()

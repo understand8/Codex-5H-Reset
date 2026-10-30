@@ -29,13 +29,13 @@ def five_hour(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def reset_target(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
-    """Determine target identifier and scheduled timestamp (stamp + 120s)."""
+    """Determine target identifier and scheduled timestamp (stamp + 30s)."""
     windows = five_hour(data)
     key = 'codex/primary' if 'codex/primary' in windows else next(iter(windows), None)
     if key is None or not windows[key].get('resetsAt'):
         return None
     stamp = windows[key]['resetsAt']
-    return f'{key}:{stamp}', stamp + 120
+    return f'{key}:{stamp}', stamp + 30
 
 
 def refresh_evidence(before: Dict[str, Any], after: Dict[str, Any]) -> str:
@@ -104,7 +104,7 @@ class SchedulerEngine:
         self.auto_active = True
         self.retry_count = 0
         self.config.set('auto_active', True)
-        self.log('已恢复自动刷新：按服务端刷新时间 + 2 分钟自动对齐。')
+        self.log('已恢复自动刷新：按服务端刷新时间 + 30 秒自动对齐。')
         self.sync_reset()
         self.check()
 

@@ -47,6 +47,47 @@ class AuthVault:
             return {'email': '', 'name': '', 'logged_in': False}
 
     @classmethod
+    def get_desktop_auth_mtime(cls) -> float:
+        auth_file = DEFAULT_CODEX_HOME / 'auth.json'
+        if not auth_file.exists():
+            return 0.0
+        try:
+            return auth_file.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    @classmethod
+    def is_current_desktop_saved(cls) -> bool:
+        info = cls.get_active_account_info()
+        email = info.get('email')
+        if not email or not info.get('logged_in'):
+            return False
+        vault_file = cls.get_vault_dir() / f"auth_{email}.json"
+        return vault_file.exists()
+
+    @classmethod
+    def import_current_desktop_account(cls) -> Optional[str]:
+        """One-click import current desktop CLI login into the Auth Vault."""
+        return cls.backup_current_to_vault()
+
+    @classmethod
+    def sync_if_known_account(cls) -> Optional[str]:
+        """Automatically updates the vault copy if the current desktop account is already in the vault."""
+        info = cls.get_active_account_info()
+        email = info.get('email')
+        if not email or not info.get('logged_in'):
+            return None
+        vault_file = cls.get_vault_dir() / f"auth_{email}.json"
+        if vault_file.exists():
+            auth_file = DEFAULT_CODEX_HOME / 'auth.json'
+            try:
+                shutil.copy2(auth_file, vault_file)
+            except Exception:
+                pass
+            return email
+        return None
+
+    @classmethod
     def backup_current_to_vault(cls) -> Optional[str]:
         auth_file = DEFAULT_CODEX_HOME / 'auth.json'
         if not auth_file.exists():

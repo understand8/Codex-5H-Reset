@@ -189,6 +189,22 @@ class App:
         )
         self.btn_account_pill.pack(side='left')
 
+        # Quick import button (shows when desktop is logged into an account not yet in vault)
+        self.btn_quick_import = ctk.CTkButton(
+            row_title,
+            text="📥 一键收录桌面端新账号",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=11, weight="bold"),
+            fg_color=("#FEF3C7", "#78350F"),
+            hover_color=("#FDE68A", "#92400E"),
+            text_color=("#B45309", "#FCD34D"),
+            border_width=1,
+            border_color=("#F59E0B", "#B45309"),
+            corner_radius=14,
+            height=28,
+            command=self.quick_import_desktop_account,
+            cursor="hand2"
+        )
+
         lbl_subtitle = ctk.CTkLabel(title_stack,
                                     text="开机即用 · 额度自动对齐刷新 · 多账号会话无损切换 · 零复杂配置",
                                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=12),
@@ -443,7 +459,7 @@ class App:
 
         btn_use_reset = ctk.CTkButton(
             row_timing,
-            text="对齐刷新时间 + 2分钟",
+            text="对齐刷新时间 + 30秒",
             font=ctk.CTkFont(family="Microsoft YaHei UI", size=12, weight="bold"),
             height=36,
             corner_radius=8,
@@ -817,8 +833,8 @@ class App:
             sync_active_banner()
             refresh_accounts()
             self.check()
-            messagebox.showinfo("收录成功", f"新账号凭据 [{new_em}] 已成功收录！随时可一键切换。")
-            self.log(f"已收录新账号 [{new_em}] 至凭据库。")
+            messagebox.showinfo("收录成功", f"当前桌面端账号凭据 [{new_em}] 已成功收录至凭据库！随时可一键切换。")
+            self.log(f"已收录桌面端账号 [{new_em}] 至凭据库。")
 
         btn_new_login = ctk.CTkButton(b_frame, text="➕ 登录另一个新账号...",
                                       font=ctk.CTkFont(family="Microsoft YaHei UI", size=11, weight="bold"),
@@ -829,7 +845,7 @@ class App:
                                       command=do_add_new)
         btn_new_login.pack(side='left', padx=(0, 10))
 
-        btn_capture = ctk.CTkButton(b_frame, text="📥 收录刚登录的账号",
+        btn_capture = ctk.CTkButton(b_frame, text="📥 一键收录当前桌面端账号",
                                     font=ctk.CTkFont(family="Microsoft YaHei UI", size=11, weight="bold"),
                                     height=34, corner_radius=8,
                                     fg_color=("#10B981", "#059669"),
@@ -878,15 +894,22 @@ class App:
         rst_5h = '无'
         if five_h:
             rem_5h = max(0, min(100, 100 - five_h.get('usedPercent', 100)))
-            if five_h.get('resetsAt'):
-                rst_5h = dt.datetime.fromtimestamp(five_h['resetsAt']).strftime('%m-%d %H:%M:%S')
+            self._resets_at_5h = five_h.get('resetsAt')
+            if self._resets_at_5h:
+                rst_5h = dt.datetime.fromtimestamp(self._resets_at_5h).strftime('%m-%d %H:%M:%S')
+                secs_5h = max(0, int(self._resets_at_5h - time.time()))
+                cd_5h = f"剩余 {secs_5h//3600:02d}:{secs_5h%3600//60:02d}:{secs_5h%60:02d}"
+                meta_5h = f"⏰ 预计刷新: {rst_5h} ({cd_5h})"
+            else:
+                rst_5h = '无'
+                meta_5h = "⏰ 预计刷新: 未提供时间"
             parts.append(f"5H 剩余 {rem_5h:g}%，刷新时间 {rst_5h}")
 
             pct_color = "#16A34A" if rem_5h > 30 else "#D97706" if rem_5h > 0 else "#DC2626"
             self.lbl_5h_pct.configure(text=f"{rem_5h:g}%", text_color=pct_color)
             self.prog_5h.configure(progress_color=pct_color)
             self.prog_5h.set(rem_5h / 100.0)
-            self.lbl_5h_meta.configure(text=f"⏰ 预计刷新: {rst_5h}", text_color=pct_color)
+            self.lbl_5h_meta.configure(text=meta_5h, text_color=pct_color)
             if rem_5h > 30:
                 self.badge_5h_status.configure(text="额度充沛", text_color="#15803D", fg_color=("#DCFCE7", "#064E3B"))
             elif rem_5h > 0:
@@ -894,6 +917,7 @@ class App:
             else:
                 self.badge_5h_status.configure(text="已耗尽·待重置", text_color="#B91C1C", fg_color=("#FEE2E2", "#7F1D1D"))
         else:
+            self._resets_at_5h = None
             self.lbl_5h_pct.configure(text="--%", text_color=("#64748B", "#94A3B8"))
             self.prog_5h.set(0.0)
             self.badge_5h_status.configure(text="未获取到", text_color="#64748B", fg_color=("#F1F5F9", "#1E293B"))
@@ -901,15 +925,23 @@ class App:
 
         if weekly:
             rem_wk = max(0, min(100, 100 - weekly.get('usedPercent', 100)))
-            rst_wk = dt.datetime.fromtimestamp(weekly['resetsAt']).strftime('%m-%d %H:%M:%S') if weekly.get('resetsAt') else '无'
+            self._resets_at_wk = weekly.get('resetsAt')
+            if self._resets_at_wk:
+                rst_wk = dt.datetime.fromtimestamp(self._resets_at_wk).strftime('%m-%d %H:%M:%S')
+                days_left = max(0, int((self._resets_at_wk - time.time()) / 86400))
+                meta_wk = f"📅 周刷新: {rst_wk} (剩余 {days_left}天)" if days_left > 0 else f"📅 周刷新: {rst_wk}"
+            else:
+                rst_wk = '无'
+                meta_wk = "📅 周刷新: 未提供时间"
             parts.append(f"周额度 剩余 {rem_wk:g}%，刷新时间 {rst_wk}")
 
             wk_color = "#059669" if rem_wk > 30 else "#D97706" if rem_wk > 0 else "#DC2626"
             self.lbl_wk_pct.configure(text=f"{rem_wk:g}%", text_color=wk_color)
             self.prog_wk.configure(progress_color=wk_color)
             self.prog_wk.set(rem_wk / 100.0)
-            self.lbl_wk_meta.configure(text=f"📅 周刷新: {rst_wk}", text_color=wk_color)
+            self.lbl_wk_meta.configure(text=meta_wk, text_color=wk_color)
         else:
+            self._resets_at_wk = None
             self.lbl_wk_pct.configure(text="--%", text_color=("#64748B", "#94A3B8"))
             self.prog_wk.set(0.0)
             self.lbl_wk_meta.configure(text="📅 周刷新: 暂无窗口", text_color=("#64748B", "#94A3B8"))
@@ -976,12 +1008,12 @@ class App:
         if not resets:
             messagebox.showinfo('暂无时间', '尚未获取到 5 小时窗口，请先检查额度，或手动设定时间。')
             return
-        stamp = max(time.time() + 5, min(resets) + 120)
+        stamp = max(time.time() + 5, min(resets) + 30)
         self.when.set(dt.datetime.fromtimestamp(stamp).strftime('%Y-%m-%d %H:%M:%S'))
         self.engine.next_at = stamp
         self.config.set('next_at', stamp)
         self.config.set('when', self.when.get())
-        self.log(f'已对齐刷新时间 + 2 分钟：{self.when.get()}')
+        self.log(f'已对齐刷新时间 + 30 秒：{self.when.get()}')
 
     def update_btn_state(self) -> None:
         if self.engine.auto_active:
@@ -1033,10 +1065,35 @@ class App:
         self.lbl_hero_desc.configure(text=desc, text_color=cfg['desc_fg'])
 
     def tick(self) -> None:
+        # Watch for external desktop account switch or login in ~/.codex/auth.json
+        cur_mtime = AuthVault.get_desktop_auth_mtime()
+        last_mtime = getattr(self, '_last_auth_mtime', None)
+        if last_mtime is not None and cur_mtime != last_mtime:
+            self._last_auth_mtime = cur_mtime
+            synced_em = AuthVault.sync_if_known_account()
+            self.engine.reload_provider()
+            self.refresh_profile_ui()
+            self.check()
+            if synced_em:
+                self.log(f"检测到桌面端切换至已知账号 [{synced_em}]，凭据已自动同步，正在刷新额度…")
+            else:
+                act = AuthVault.get_active_account_info()
+                new_em = act.get('email') or '新账号'
+                self.log(f"检测到桌面端登录了新账号 [{new_em}]，点击顶部【一键收录】即可保存！")
+        elif last_mtime is None:
+            self._last_auth_mtime = cur_mtime
+
         self.engine.process_bus_events()
 
         if self.engine.latest and self.engine.latest != getattr(self, '_last_rendered_limits', None):
             self.show_limits(self.engine.latest)
+
+        # Update 5H card countdown dynamically
+        if getattr(self, '_resets_at_5h', None):
+            secs_5h = max(0, int(self._resets_at_5h - time.time()))
+            rst_5h_str = dt.datetime.fromtimestamp(self._resets_at_5h).strftime('%m-%d %H:%M:%S')
+            cd_5h_str = f"剩余 {secs_5h//3600:02d}:{secs_5h%3600//60:02d}:{secs_5h%60:02d}"
+            self.lbl_5h_meta.configure(text=f"⏰ 预计刷新: {rst_5h_str} ({cd_5h_str})")
 
         if self.engine.next_at and not self.engine.busy and time.time() >= self.engine.next_at:
             self.engine.send_now(scheduled=True)
@@ -1066,7 +1123,7 @@ class App:
             target_str = dt.datetime.fromtimestamp(self.engine.next_at).strftime('%m-%d %H:%M:%S')
             retry_hint = f' (重试中 {self.engine.retry_count}/{self.engine.max_retries})' if self.engine.retry_count > 0 else ''
             state_title = f'🟢 自动刷新运行中 · 距离下次发送 {countdown_str}{retry_hint}'
-            state_desc = f'预定发送时间：{target_str} （到达后将自动触发执行）'
+            state_desc = f'预定发送时间：{target_str} （服务端刷新时间到达后 + 30秒自动发送心跳重置）'
             self.update_live_banner('scheduled', state_title, state_desc)
             self.status.set(f'距离发送 {countdown_str}  ·  {target_str}')
         elif self.engine.auto_active:
@@ -1111,6 +1168,21 @@ class App:
                 fg_color=("#FEE2E2", "#7F1D1D"),
                 text_color=("#DC2626", "#FCA5A5")
             )
+
+        if hasattr(self, 'btn_quick_import'):
+            if email and not AuthVault.is_current_desktop_saved():
+                self.btn_quick_import.pack(side='left', padx=(8, 0))
+            else:
+                self.btn_quick_import.pack_forget()
+
+    def quick_import_desktop_account(self) -> None:
+        email = AuthVault.import_current_desktop_account()
+        if email:
+            self.refresh_profile_ui()
+            self.log(f"已成功将桌面端账号 [{email}] 收录至凭据库！可在凭据库随时切换。")
+            messagebox.showinfo("收录成功", f"桌面端账号 [{email}] 已成功收录至凭据库！可在凭据库随时切换。")
+        else:
+            messagebox.showwarning("提示", "未检测到已登录的桌面端账号凭据。")
 
     def restore_from_tray(self) -> None:
         self.root.deiconify()

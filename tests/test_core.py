@@ -63,7 +63,7 @@ class TestCoreScheduler(unittest.TestCase):
         target = reset_target(self.mock_payload)
         self.assertIsNotNone(target)
         ident, stamp = target
-        expected_stamp = self.mock_payload["rateLimits"]["primary"]["resetsAt"] + 120
+        expected_stamp = self.mock_payload["rateLimits"]["primary"]["resetsAt"] + 30
         self.assertEqual(stamp, expected_stamp)
         self.assertTrue(ident.startswith("codex/primary:"))
 
@@ -112,7 +112,7 @@ class TestCoreScheduler(unittest.TestCase):
                 }
             }
             engine.sync_reset()
-            self.assertEqual(engine.next_at, target_ts + 120)
+            self.assertEqual(engine.next_at, target_ts + 30)
             self.assertEqual(engine.scheduled_reset, f"codex/primary:{target_ts}")
         finally:
             if temp_path.exists():
